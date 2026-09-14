@@ -1,5 +1,7 @@
 # Online Cinema API
 
+[![CI](https://github.com/omerlenko/online-cinema-api/actions/workflows/ci-pipeline.yml/badge.svg?branch=main)](https://github.com/omerlenko/online-cinema-api/actions/workflows/ci-pipeline.yml)
+
 Backend API for an online cinema platform where users can browse, purchase, and watch movies. Built with FastAPI and
 async SQLAlchemy.
 
