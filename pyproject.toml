@@ -39,6 +39,7 @@ strict = true
 plugins = [
     "pydantic.mypy"
 ]
+exclude = "^migrations/versions/"
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
