@@ -63,6 +63,7 @@ asyncio_default_test_loop_scope = "session"
 [tool.coverage.run]
 source = ["src"]
 branch = true
+concurrency = ["greenlet"]
 
 [tool.coverage.report]
 show_missing = true
