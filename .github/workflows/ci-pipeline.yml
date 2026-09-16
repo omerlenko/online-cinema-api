@@ -8,10 +8,31 @@ on:
       - main
 permissions:
   contents: read
+env:
+  POSTGRES_USER: ci_user
+  POSTGRES_PASSWORD: ci_password
+  POSTGRES_DB: cinema_db
+  POSTGRES_HOST: localhost
+  POSTGRES_PORT: 5432
 
 jobs:
   test-and-lint:
     runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:18
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Check out repository
@@ -37,6 +58,12 @@ jobs:
 
       - name: Check Static Types (mypy)
         run: poetry run mypy .
+
+      - name: Apply migrations
+        run: poetry run alembic upgrade head
+
+      - name: Check models match migrations
+        run: poetry run alembic check
 
       - name: Run Tests
         run: poetry run pytest --cov

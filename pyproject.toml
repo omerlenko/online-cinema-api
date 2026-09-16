@@ -39,6 +39,7 @@ strict = true
 plugins = [
     "pydantic.mypy"
 ]
+exclude = "^migrations/versions/"
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
@@ -62,6 +63,7 @@ asyncio_default_test_loop_scope = "session"
 [tool.coverage.run]
 source = ["src"]
 branch = true
+concurrency = ["greenlet"]
 
 [tool.coverage.report]
 show_missing = true
