@@ -1,4 +1,16 @@
 services:
+  app:
+    build: .
+    env_file:
+      .env
+    environment:
+      - POSTGRES_HOST=db
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
   db:
     image: "postgres:18"
     environment:

@@ -11,30 +11,38 @@ async SQLAlchemy.
 
 - **Python 3.13**, **FastAPI**, **Pydantic v2**
 - **PostgreSQL 18**, **SQLAlchemy 2.0** (async) with **asyncpg**, **Alembic** for migrations
-- **Docker Compose** for local services
+- **Docker** and **Docker Compose**
 - **Poetry** for dependency management
 - **pytest** + **pytest-asyncio** + **pytest-cov** for testing
 - **black**, **flake8**, **mypy** (strict) for code quality
 - **GitHub Actions** for CI
 
-## Getting Started
+## Quick Start (Docker)
 
-### Prerequisites
-
-- Python 3.13
-- [Poetry](https://python-poetry.org/) 2.x
-- [Docker](https://docs.docker.com/get-docker/) with Docker Compose
-
-### Installation
+Requires [Docker](https://docs.docker.com/get-docker/) with Docker Compose.
 
 ```bash
 git clone https://github.com/omerlenko/online-cinema-api.git
 cd online-cinema-api
-poetry install
 cp .env.example .env
+docker compose up --build
 ```
 
-### Configuration
+This starts PostgreSQL, waits until it is healthy, applies database migrations, and starts the API.
+
+- API: http://localhost:8000
+- Interactive docs: http://localhost:8000/docs
+- Health check (includes database connectivity): http://localhost:8000/health
+
+Useful commands:
+
+```bash
+docker compose down                          # stop all services (data is kept)
+docker compose logs -f app                   # follow API logs
+docker compose run --rm app alembic current  # run a one-off command in the app image
+```
+
+## Configuration
 
 All settings are read from environment variables, loaded from `.env` for local development.
 
@@ -46,26 +54,29 @@ All settings are read from environment variables, loaded from `.env` for local d
 | `POSTGRES_HOST`     | Database host     | `localhost`   |
 | `POSTGRES_PORT`     | Database port     | `5432`        |
 
-### Database
+When running in Docker Compose, `POSTGRES_HOST` is overridden to `db` for the API container.
 
-Start PostgreSQL and apply migrations:
+## Local Development
+
+Runs the API directly on your machine, with only the infrastructure in Docker.
+
+### Prerequisites
+
+- Python 3.13
+- [Poetry](https://python-poetry.org/) 2.x
+- Docker with Docker Compose
+
+### Setup
 
 ```bash
+poetry install
+cp .env.example .env
 docker compose up -d db
 poetry run alembic upgrade head
-```
-
-### Running the app
-
-```bash
 poetry run uvicorn src.main:app --reload
 ```
 
-- API: http://127.0.0.1:8000
-- Interactive docs: http://127.0.0.1:8000/docs
-- Health check (includes database connectivity): http://127.0.0.1:8000/health
-
-## Development
+Stop the API container first (`docker compose stop app`) if the full stack is running, since both use port 8000.
 
 ### Migrations
 
@@ -98,5 +109,6 @@ poetry run mypy .
 ```
 src/            # application code
 migrations/     # Alembic database migrations
+commands/       # container entrypoint scripts
 tests/          # unit, integration, and end-to-end tests
 ```
