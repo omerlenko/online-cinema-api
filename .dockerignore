@@ -1,0 +1,12 @@
+.env
+.git/
+.venv/
+.idea/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.github/
+tests/
+SPEC.md
