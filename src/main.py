@@ -3,10 +3,15 @@ import logging
 from fastapi import FastAPI, HTTPException
 from sqlalchemy import text
 
+from src.accounts.router import router as accounts_router
 from src.database.session import DbDep
 from src.core.schemas import HealthResponseSchema
 
 app = FastAPI()
+api_version_prefix = "/api/v1"
+app.include_router(
+    accounts_router, prefix=f"{api_version_prefix}/accounts", tags=["accounts"]
+)
 
 logger = logging.getLogger(__name__)
 
