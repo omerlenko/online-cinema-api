@@ -22,7 +22,8 @@ class UserRegistrationRequestSchema(BaseModel):
 
 
 class UserRegistrationResponseSchema(BaseModel):
-    email: str
+    id: int
+    email: Email
 
     model_config = ConfigDict(from_attributes=True)
 

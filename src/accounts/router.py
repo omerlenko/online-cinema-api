@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
-import smtplib
-from email.message import EmailMessage
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from sqlalchemy.exc import IntegrityError
 
+from src.core.config import get_settings
+from src.core.mailer import EmailSenderDep
 from src.accounts.crud import (
     get_user_by_email,
     get_user_group_by_name,
@@ -22,33 +22,25 @@ from src.accounts.schemas import (
     MessageResponseSchema,
     ResendActivationTokenRequestSchema,
 )
-from src.core.config import get_settings
 from src.database.session import DbDep
 
 router = APIRouter()
 settings = get_settings()
 
 
-def send_email(to_email: str, subject: str, body: str) -> None:
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = "noreply@example.com"
-    msg["To"] = to_email
-
-    msg.set_content(body)
-
-    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-        if settings.SMTP_USE_TLS:
-            server.starttls()
-
-        if settings.SMTP_USER and settings.SMTP_PASSWORD:
-            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-        server.send_message(msg)
+def generate_activation_link(token: str) -> str:
+    return (
+        f"{settings.BASE_URL}{settings.API_VERSION_PREFIX}"
+        f"/accounts/activate?token={token}"
+    )
 
 
 @router.post("/register", status_code=201)
 async def register_user(
-    db: DbDep, data: UserRegistrationRequestSchema, background_tasks: BackgroundTasks
+    db: DbDep,
+    data: UserRegistrationRequestSchema,
+    background_tasks: BackgroundTasks,
+    email_sender: EmailSenderDep,
 ) -> UserRegistrationResponseSchema:
     existing_user = await get_user_by_email(db=db, email=data.email)
     if existing_user is not None:
@@ -68,17 +60,15 @@ async def register_user(
             status_code=409, detail="A user with this email already exist"
         )
 
-    activation_link = (
-        f"http://127.0.0.1:8000/api/v1/accounts/activate?token={activation_token.token}"
-    )
+    activation_link = generate_activation_link(activation_token.token)
     background_tasks.add_task(
-        send_email,
-        to_email=new_user.email,
+        email_sender.send_email,
+        to=new_user.email,
         subject="Account activation link",
         body=activation_link,
     )
 
-    return UserRegistrationResponseSchema(email=new_user.email)
+    return UserRegistrationResponseSchema(id=new_user.id, email=new_user.email)
 
 
 @router.get("/activate")
@@ -111,6 +101,7 @@ async def resend_activation_token(
     db: DbDep,
     email_data: ResendActivationTokenRequestSchema,
     background_tasks: BackgroundTasks,
+    email_sender: EmailSenderDep,
 ) -> MessageResponseSchema:
     user = await get_user_by_email(db=db, email=email_data.email)
     if user is None or user.is_active:
@@ -128,12 +119,10 @@ async def resend_activation_token(
             activation_token = await create_activation_token(db=db, user_id=user.id)
     await db.commit()
 
-    activation_link = (
-        f"http://127.0.0.1:8000/api/v1/accounts/activate?token={activation_token.token}"
-    )
+    activation_link = generate_activation_link(activation_token.token)
     background_tasks.add_task(
-        send_email,
-        to_email=user.email,
+        email_sender.send_email,
+        to=user.email,
         subject="New account activation link",
         body=activation_link,
     )
