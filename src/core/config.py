@@ -13,8 +13,8 @@ class Settings(BaseSettings):
 
     SMTP_HOST: str = "localhost"
     SMTP_PORT: int = 1025
-    SMTP_USER: str | None = None
-    SMTP_PASSWORD: str | None = None
+    SMTP_USER: str | None = "admin"
+    SMTP_PASSWORD: str | None = "some_password"
     SMTP_USE_TLS: bool = False
     EMAIL_SENDER_ADDRESS: str = "noreply@example.com"
 
