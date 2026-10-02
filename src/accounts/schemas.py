@@ -6,6 +6,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     BeforeValidator,
+    Field,
 )
 
 from src.accounts.validators import validate_password_complexity
@@ -18,7 +19,11 @@ Email = Annotated[
 
 class UserRegistrationRequestSchema(BaseModel):
     email: Email
-    password: Password
+    password: Password = Field(
+        description="8-32 characters with upper and lower case letters, "
+        "a digit and a special character (@$!%*?#&).",
+        examples=["Password123!"],
+    )
 
 
 class UserRegistrationResponseSchema(BaseModel):

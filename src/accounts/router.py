@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from sqlalchemy.exc import IntegrityError
 
+from src.core.schemas import ErrorResponseSchema
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
 from src.accounts.crud import (
@@ -35,17 +37,30 @@ def generate_activation_link(token: str) -> str:
     )
 
 
-@router.post("/register", status_code=201)
+@router.post(
+    "/register",
+    status_code=201,
+    summary="Register a new user",
+    responses={
+        409: {"model": ErrorResponseSchema, "description": "Email already registered"},
+    },
+)
 async def register_user(
     db: DbDep,
     data: UserRegistrationRequestSchema,
     background_tasks: BackgroundTasks,
     email_sender: EmailSenderDep,
 ) -> UserRegistrationResponseSchema:
+    """
+    Create an inactive user account and send an activation link by email.
+
+    The link is valid for 24 hours. If it expires, request a new one via
+    `/resend_activation`.
+    """
     existing_user = await get_user_by_email(db=db, email=data.email)
     if existing_user is not None:
         raise HTTPException(
-            status_code=409, detail="A user with this email already exist"
+            status_code=409, detail="A user with this email already exists"
         )
     user_group = await get_user_group_by_name(db=db, name=UserGroupEnum.USER)
     if user_group is None:
@@ -57,7 +72,7 @@ async def register_user(
         await db.commit()
     except IntegrityError:
         raise HTTPException(
-            status_code=409, detail="A user with this email already exist"
+            status_code=409, detail="A user with this email already exists"
         )
 
     activation_link = generate_activation_link(activation_token.token)
@@ -71,8 +86,34 @@ async def register_user(
     return UserRegistrationResponseSchema(id=new_user.id, email=new_user.email)
 
 
-@router.get("/activate")
-async def activate_user(db: DbDep, token: str) -> MessageResponseSchema:
+@router.get(
+    "/activate",
+    summary="Activate a registered user",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "Invalid or expired activation token",
+        },
+        404: {
+            "model": ErrorResponseSchema,
+            "description": "User not found",
+        },
+    },
+)
+async def activate_user(
+    db: DbDep,
+    token: Annotated[str, Query(description="Token from the activation email link")],
+) -> MessageResponseSchema:
+    """
+    Activate an inactive user account with their activation token.
+
+    Endpoint uses GET method because the link is opened from an email.
+
+    An already active account gets 200 OK with 'User already active', not an error.
+
+    An expired link gets 400, the user can use '/resend_activation'
+    to get a new activation link.
+    """
     activation_token = await get_activation_token(db=db, token=token)
     if activation_token is None:
         raise HTTPException(
@@ -96,18 +137,29 @@ async def activate_user(db: DbDep, token: str) -> MessageResponseSchema:
     return MessageResponseSchema(message="User activated successfully")
 
 
-@router.post("/resend_activation")
+@router.post(
+    "/resend_activation",
+    summary="Resend activation email",
+)
 async def resend_activation_token(
     db: DbDep,
     email_data: ResendActivationTokenRequestSchema,
     background_tasks: BackgroundTasks,
     email_sender: EmailSenderDep,
 ) -> MessageResponseSchema:
+    """
+    Resend email with an activation link to an inactive account.
+
+    Endpoint returns identical message in all cases
+    to avoid revealing if an email is registered or already active.
+
+    Active accounts receive no email.
+    """
     user = await get_user_by_email(db=db, email=email_data.email)
     if user is None or user.is_active:
         return MessageResponseSchema(
-            message="Activation token has been resent to the provided email "
-            "if it's valid"
+            message="If the email belongs to an inactive account, "
+            "a new activation link has been sent"
         )
 
     activation_token = await get_activation_token_by_user_id(db=db, user_id=user.id)
@@ -128,6 +180,6 @@ async def resend_activation_token(
     )
 
     return MessageResponseSchema(
-        message="Activation token has been resent to the provided email "
-        "if it's valid"
+        message="If the email belongs to an inactive account, "
+        "a new activation link has been sent"
     )
