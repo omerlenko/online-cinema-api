@@ -5,6 +5,7 @@ services:
       .env
     environment:
       - POSTGRES_HOST=db
+      - SMTP_HOST=mailpit
     depends_on:
       db:
         condition: service_healthy
