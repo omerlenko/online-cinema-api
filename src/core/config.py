@@ -11,6 +11,16 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str
     POSTGRES_HOST: str
 
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 1025
+    SMTP_USER: str | None = "admin"
+    SMTP_PASSWORD: str | None = "some_password"
+    SMTP_USE_TLS: bool = False
+    EMAIL_SENDER_ADDRESS: str = "noreply@example.com"
+
+    BASE_URL: str = "http://127.0.0.1:8000"
+    API_VERSION_PREFIX: str = "/api/v1"
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @property
