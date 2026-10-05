@@ -16,6 +16,7 @@ from src.accounts.crud import (
     get_user_by_id,
     get_activation_token_by_user_id,
     delete_activation_token,
+    create_refresh_token_object,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -23,6 +24,12 @@ from src.accounts.schemas import (
     UserRegistrationRequestSchema,
     MessageResponseSchema,
     ResendActivationTokenRequestSchema,
+    UserLoginRequestSchema,
+    UserLoginResponseSchema,
+)
+from src.core.security import (
+    verify_hashed_password,
+    create_access_token,
 )
 from src.database.session import DbDep
 
@@ -182,4 +189,32 @@ async def resend_activation_token(
     return MessageResponseSchema(
         message="If the email belongs to an inactive account, "
         "a new activation link has been sent"
+    )
+
+
+@router.post("/login")
+async def login_user(
+    db: DbDep, login_data: UserLoginRequestSchema
+) -> UserLoginResponseSchema:
+    user = await get_user_by_email(db=db, email=login_data.email)
+    if user is None:
+        raise HTTPException(
+            status_code=401, detail="Provided email or password is incorrect"
+        )
+    if not verify_hashed_password(login_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401, detail="Provided email or password is incorrect"
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="User account must be active to log in",
+        )
+
+    access_token = create_access_token(user_id=user.id)
+    refresh_token = await create_refresh_token_object(db=db, user_id=user.id)
+    await db.commit()
+
+    return UserLoginResponseSchema(
+        access_token=access_token, refresh_token=refresh_token.token
     )
