@@ -20,6 +20,12 @@ class Settings(BaseSettings):
 
     BASE_URL: str = "http://127.0.0.1:8000"
     API_VERSION_PREFIX: str = "/api/v1"
+    ACTIVATION_TOKEN_LIFETIME_DAYS: int = 1
+
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    JWT_ACCESS_TOKEN_LIFETIME_MINUTES: int = 15
+    JWT_REFRESH_TOKEN_LIFETIME_DAYS: int = 7
 
     model_config = SettingsConfigDict(env_file=".env")
 
