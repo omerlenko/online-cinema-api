@@ -9,7 +9,15 @@ from sqlalchemy.orm import joinedload
 from src.accounts.models import ActivationToken, UserGroupEnum
 from src.accounts.models import User
 from src.core.config import get_settings
-from src.core.security import verify_hashed_password
+from src.core.security import (
+    verify_hashed_password,
+    decode_token,
+    TokenTypeEnum,
+    create_refresh_token,
+    _create_jwt_token,
+    create_access_token,
+)
+from tests.helpers import auth_headers
 
 settings = get_settings()
 ACCOUNTS_URL = f"{settings.API_VERSION_PREFIX}/accounts"
@@ -305,3 +313,143 @@ async def test_resend_activation_to_already_active_user(
     ), "Proper response message not in response data"
 
     assert len(fake_email_sender.sent_emails) == 0, "Sent emails list is not empty"
+
+
+async def test_login_user(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    password = "Password12345!"
+    active_user = await create_user(
+        email="user@example.com", password=password, is_active=True
+    )
+    payload = {"email": active_user.email, "password": password}
+    response = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    response_data = response.json()
+    assert "access_token" in response_data
+    assert "refresh_token" in response_data
+    assert "token_type" in response_data
+    assert response_data["token_type"] == "bearer"
+
+    assert (
+        decode_token(response_data["access_token"], TokenTypeEnum.ACCESS)
+        == active_user.id
+    )
+    assert (
+        decode_token(response_data["refresh_token"], TokenTypeEnum.REFRESH)
+        == active_user.id
+    )
+
+
+async def test_login_non_existing_user(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    payload = {"email": "user@example.com", "password": "Password12345!"}
+    response = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_login_user_with_wrong_password(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    active_user = await create_user(
+        email="user@example.com", password="Password12345!", is_active=True
+    )
+    payload = {"email": active_user.email, "password": "WrongPassword123!"}
+    response = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_login_inactive_user(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    password = "Password12345!"
+    inactive_user = await create_user(password=password, is_active=False)
+    payload = {"email": inactive_user.email, "password": password}
+    response = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+
+    assert response.status_code == 403, "Expected status code 401 Unauthorized"
+
+
+async def test_get_current_user_detail(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    user = await create_user(is_active=True)
+    response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_headers(user))
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_data = response.json()
+    assert response_data["id"] == user.id
+    assert response_data["group_name"] == "user"
+
+
+async def test_get_current_user_detail_with_no_auth_header(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    response = await client.get(f"{ACCOUNTS_URL}/me")
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_get_current_user_detail_with_invalid_token(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    auth_header = {"Authorization": "Bearer " + "X" * 32}
+    response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_header)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_get_current_user_detail_with_refresh_token(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    user = await create_user(is_active=True)
+    refresh_token = create_refresh_token(
+        user.id, expires_at=datetime.now(timezone.utc) + timedelta(days=1)
+    )
+    auth_header = {"Authorization": f"Bearer {refresh_token}"}
+    response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_header)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_get_current_user_detail_with_expired_token(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    user = await create_user(is_active=True)
+    expired_access_token = _create_jwt_token(
+        user.id,
+        token_type=TokenTypeEnum.ACCESS,
+        expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+    )
+    auth_header = {"Authorization": f"Bearer {expired_access_token}"}
+    response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_header)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_get_current_user_detail_for_deleted_user(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]], db_session
+):
+    user = await create_user(is_active=True)
+    access_token = create_access_token(user.id)
+    auth_header = {"Authorization": f"Bearer {access_token}"}
+
+    await db_session.delete(user)
+    await db_session.flush()
+    response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_header)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_get_current_user_detail_with_inactive_user(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    user = await create_user(is_active=False)
+    response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_headers(user))
+
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
