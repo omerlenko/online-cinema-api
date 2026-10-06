@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.accounts.models import UserGroup, UserGroupEnum, ActivationToken, RefreshToken
 from src.accounts.schemas import UserRegistrationRequestSchema
@@ -18,7 +19,9 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
 
 
 async def get_user_by_id(db: AsyncSession, id: int) -> User | None:
-    user = await db.scalar(select(User).where(User.id == id))
+    user = await db.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == id)
+    )
     return user
 
 

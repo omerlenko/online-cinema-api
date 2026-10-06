@@ -53,3 +53,9 @@ class UserLoginResponseSchema(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+
+
+class UserDetailResponseSchema(BaseModel):
+    id: int
+    email: str
+    group_name: str

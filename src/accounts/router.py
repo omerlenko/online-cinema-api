@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from sqlalchemy.exc import IntegrityError
 
+from src.accounts.dependencies import CurrentUserDep
 from src.core.schemas import ErrorResponseSchema
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
@@ -26,6 +27,7 @@ from src.accounts.schemas import (
     ResendActivationTokenRequestSchema,
     UserLoginRequestSchema,
     UserLoginResponseSchema,
+    UserDetailResponseSchema,
 )
 from src.core.security import (
     verify_hashed_password,
@@ -217,4 +219,13 @@ async def login_user(
 
     return UserLoginResponseSchema(
         access_token=access_token, refresh_token=refresh_token.token
+    )
+
+
+@router.get("/me")
+async def get_current_user_detail(
+    current_user: CurrentUserDep,
+) -> UserDetailResponseSchema:
+    return UserDetailResponseSchema(
+        id=current_user.id, email=current_user.email, group_name=current_user.group.name
     )
