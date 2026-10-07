@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 import enum
 
 from sqlalchemy import Enum, func, DateTime, ForeignKey
@@ -18,6 +18,7 @@ class UserGroup(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[UserGroupEnum] = mapped_column(Enum(UserGroupEnum), unique=True)
+
     users: Mapped[list["User"]] = relationship("User", back_populates="group")
 
 
@@ -37,9 +38,13 @@ class User(Base):
     group_id: Mapped[int] = mapped_column(
         ForeignKey("user_groups.id", ondelete="RESTRICT")
     )
+
     group: Mapped[UserGroup] = relationship("UserGroup", back_populates="users")
     activation_token: Mapped["ActivationToken | None"] = relationship(
         "ActivationToken", back_populates="user", cascade="all, delete-orphan"
+    )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -49,10 +54,7 @@ class TokenBase(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     token: Mapped[str] = mapped_column(unique=True)
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc) + timedelta(days=1),
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class ActivationToken(TokenBase):
@@ -61,4 +63,11 @@ class ActivationToken(TokenBase):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), unique=True
     )
+
     user: Mapped[User] = relationship("User", back_populates="activation_token")
+
+
+class RefreshToken(TokenBase):
+    __tablename__ = "refresh_tokens"
+
+    user: Mapped[User] = relationship("User", back_populates="refresh_tokens")

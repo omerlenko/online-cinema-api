@@ -17,13 +17,17 @@ Email = Annotated[
 ]
 
 
-class UserRegistrationRequestSchema(BaseModel):
+class BaseEmailPasswordSchema(BaseModel):
     email: Email
     password: Password = Field(
         description="8-32 characters with upper and lower case letters, "
         "a digit and a special character (@$!%*?#&).",
         examples=["Password123!"],
     )
+
+
+class UserRegistrationRequestSchema(BaseEmailPasswordSchema):
+    pass
 
 
 class UserRegistrationResponseSchema(BaseModel):
@@ -39,3 +43,28 @@ class ResendActivationTokenRequestSchema(BaseModel):
 
 class MessageResponseSchema(BaseModel):
     message: str
+
+
+class UserLoginRequestSchema(BaseEmailPasswordSchema):
+    password: str = Field(examples=["Password12345!"])
+
+
+class UserLoginResponseSchema(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class UserDetailResponseSchema(BaseModel):
+    id: int
+    email: str
+    group_name: str
+
+
+class RefreshTokenRequestSchema(BaseModel):
+    refresh_token: str
+
+
+class RefreshTokenResponseSchema(BaseModel):
+    access_token: str
+    token_type: str = "bearer"

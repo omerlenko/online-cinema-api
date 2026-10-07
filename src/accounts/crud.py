@@ -1,10 +1,16 @@
+from datetime import datetime, timezone, timedelta
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from src.accounts.models import UserGroup, UserGroupEnum, ActivationToken
+from src.accounts.models import UserGroup, UserGroupEnum, ActivationToken, RefreshToken
 from src.accounts.schemas import UserRegistrationRequestSchema
 from src.accounts.models import User
-from src.core.security import hash_password, generate_token
+from src.core.config import get_settings
+from src.core.security import hash_password, generate_token, create_refresh_token
+
+settings = get_settings()
 
 
 async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
@@ -12,8 +18,10 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return user
 
 
-async def get_user_by_id(db: AsyncSession, id: int) -> User | None:
-    user = await db.scalar(select(User).where(User.id == id))
+async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
+    user = await db.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == user_id)
+    )
     return user
 
 
@@ -39,7 +47,12 @@ async def create_user(
 
 async def create_activation_token(db: AsyncSession, user_id: int) -> ActivationToken:
     token = generate_token()
-    activation_token = ActivationToken(user_id=user_id, token=token)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        days=settings.ACTIVATION_TOKEN_LIFETIME_DAYS
+    )
+    activation_token = ActivationToken(
+        user_id=user_id, token=token, expires_at=expires_at
+    )
     db.add(activation_token)
     await db.flush()
     await db.refresh(activation_token)
@@ -66,4 +79,35 @@ async def delete_activation_token(
     db: AsyncSession, activation_token: ActivationToken
 ) -> None:
     await db.delete(activation_token)
+    await db.flush()
+
+
+async def create_refresh_token_object(
+    db: AsyncSession,
+    user_id: int,
+) -> RefreshToken:
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        days=settings.JWT_REFRESH_TOKEN_LIFETIME_DAYS
+    )
+    token = create_refresh_token(user_id, expires_at)
+    refresh_token = RefreshToken(user_id=user_id, token=token, expires_at=expires_at)
+    db.add(refresh_token)
+    await db.flush()
+    await db.refresh(refresh_token)
+    return refresh_token
+
+
+async def get_refresh_token_object_by_token(
+    db: AsyncSession, token: str
+) -> RefreshToken | None:
+    refresh_token = await db.scalar(
+        select(RefreshToken).where(RefreshToken.token == token)
+    )
+    return refresh_token
+
+
+async def delete_refresh_token_object(
+    db: AsyncSession, refresh_token_object: RefreshToken
+) -> None:
+    await db.delete(refresh_token_object)
     await db.flush()

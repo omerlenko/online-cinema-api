@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from sqlalchemy.exc import IntegrityError
 
+from src.accounts.dependencies import CurrentUserDep
 from src.core.schemas import ErrorResponseSchema
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
@@ -16,6 +17,9 @@ from src.accounts.crud import (
     get_user_by_id,
     get_activation_token_by_user_id,
     delete_activation_token,
+    create_refresh_token_object,
+    get_refresh_token_object_by_token,
+    delete_refresh_token_object,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -23,6 +27,18 @@ from src.accounts.schemas import (
     UserRegistrationRequestSchema,
     MessageResponseSchema,
     ResendActivationTokenRequestSchema,
+    UserLoginRequestSchema,
+    UserLoginResponseSchema,
+    UserDetailResponseSchema,
+    RefreshTokenRequestSchema,
+    RefreshTokenResponseSchema,
+)
+from src.core.security import (
+    verify_hashed_password,
+    create_access_token,
+    decode_token,
+    TokenTypeEnum,
+    InvalidTokenError,
 )
 from src.database.session import DbDep
 
@@ -120,7 +136,7 @@ async def activate_user(
             status_code=400, detail="Invalid or expired activation token"
         )
 
-    user = await get_user_by_id(db=db, id=activation_token.user_id)
+    user = await get_user_by_id(db=db, user_id=activation_token.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -183,3 +199,146 @@ async def resend_activation_token(
         message="If the email belongs to an inactive account, "
         "a new activation link has been sent"
     )
+
+
+@router.post(
+    "/login",
+    summary="Log in a registered user",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Provided email or password is incorrect",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Account is not activated",
+        },
+    },
+)
+async def login_user(
+    db: DbDep, login_data: UserLoginRequestSchema
+) -> UserLoginResponseSchema:
+    """
+    Log in a registered user if their email and password are correct.
+
+    User account must be activated to log in.
+
+    An unknown email and a wrong password return the same 401,
+    so the response does not reveal whether an email is registered.
+
+    Returns access and refresh tokens if login is successful.
+    """
+    user = await get_user_by_email(db=db, email=login_data.email)
+    if user is None:
+        raise HTTPException(
+            status_code=401, detail="Provided email or password is incorrect"
+        )
+    if not verify_hashed_password(login_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=401, detail="Provided email or password is incorrect"
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail="Account is not activated",
+        )
+
+    access_token = create_access_token(user_id=user.id)
+    refresh_token = await create_refresh_token_object(db=db, user_id=user.id)
+    await db.commit()
+
+    return UserLoginResponseSchema(
+        access_token=access_token, refresh_token=refresh_token.token
+    )
+
+
+@router.get(
+    "/me",
+    summary="Get current user details",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User not active",
+        },
+    },
+)
+async def get_current_user_detail(
+    current_user: CurrentUserDep,
+) -> UserDetailResponseSchema:
+    """
+    Return current user details, including id, email and user group.
+    """
+    return UserDetailResponseSchema(
+        id=current_user.id, email=current_user.email, group_name=current_user.group.name
+    )
+
+
+@router.post(
+    "/refresh",
+    summary="Get a new access token",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Refresh token is invalid, expired, revoked, "
+            "or not a refresh token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User not active",
+        },
+    },
+)
+async def refresh_access_token(
+    db: DbDep, token_data: RefreshTokenRequestSchema
+) -> RefreshTokenResponseSchema:
+    """
+    Exchange a valid refresh token for a new access token.
+
+    The refresh token is not replaced;
+    it stays valid until it expires or the user logs out.
+    """
+    try:
+        user_id = decode_token(token_data.refresh_token, TokenTypeEnum.REFRESH)
+    except InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    token_object = await get_refresh_token_object_by_token(
+        db=db, token=token_data.refresh_token
+    )
+    if token_object is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = await get_user_by_id(db=db, user_id=user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="User not active")
+
+    return RefreshTokenResponseSchema(access_token=create_access_token(user_id))
+
+
+@router.post(
+    "/logout",
+    status_code=204,
+    summary="Log out user",
+)
+async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
+    """
+    Log out the user by deleting the provided refresh token.
+
+    Endpoint is idempotent - repeated requests will return 204.
+
+    The access token remains valid until it expires.
+    """
+    refresh_token_object = await get_refresh_token_object_by_token(
+        db=db, token=token_data.refresh_token
+    )
+    if refresh_token_object is None:
+        return
+
+    await delete_refresh_token_object(db=db, refresh_token_object=refresh_token_object)
+    await db.commit()

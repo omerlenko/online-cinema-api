@@ -1,19 +1,25 @@
 from datetime import datetime, timezone, timedelta
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text, insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from src.accounts.models import UserGroup, UserGroupEnum, User, ActivationToken
+from src.accounts.models import (
+    UserGroup,
+    UserGroupEnum,
+    User,
+    ActivationToken,
+    RefreshToken,
+)
 from src.core.mailer import get_email_sender
 from src.core.config import get_settings
-from src.core.security import hash_password, generate_token
+from src.core.security import hash_password, generate_token, create_refresh_token
 from src.database.base import Base
 from src.database.session import get_db
 from src.main import app
+from tests.helpers import FakeEmailSender
 
 settings = get_settings()
 TEST_DB_NAME = f"{settings.POSTGRES_DB}_test"
@@ -79,23 +85,6 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     app.dependency_overrides.clear()
 
 
-@dataclass
-class SentEmail:
-    to: str
-    subject: str
-    body: str
-
-
-class FakeEmailSender:
-
-    def __init__(self) -> None:
-        self.sent_emails: list[SentEmail] = []
-
-    def send_email(self, to: str, subject: str, body: str) -> None:
-        email = SentEmail(to, subject, body)
-        self.sent_emails.append(email)
-
-
 @pytest.fixture
 def fake_email_sender(monkeypatch):
     fake = FakeEmailSender()
@@ -138,10 +127,12 @@ def create_token(
     async def _create_token(
         user_id: int,
         expires_at: datetime | None = None,
-    ):
+    ) -> ActivationToken:
         token = generate_token()
         if expires_at is None:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=1)
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                days=settings.ACTIVATION_TOKEN_LIFETIME_DAYS
+            )
         activation_token = ActivationToken(
             user_id=user_id, token=token, expires_at=expires_at
         )
@@ -150,3 +141,25 @@ def create_token(
         return activation_token
 
     return _create_token
+
+
+@pytest.fixture
+def create_refresh_token_object(
+    db_session: AsyncSession,
+) -> Callable[..., Awaitable[RefreshToken]]:
+    async def _create_refresh_token_object(
+        user_id: int, expires_at: datetime | None = None
+    ) -> RefreshToken:
+        if expires_at is None:
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                days=settings.JWT_REFRESH_TOKEN_LIFETIME_DAYS
+            )
+        token = create_refresh_token(user_id, expires_at)
+        refresh_token = RefreshToken(
+            user_id=user_id, token=token, expires_at=expires_at
+        )
+        db_session.add(refresh_token)
+        await db_session.flush()
+        return refresh_token
+
+    return _create_refresh_token_object
