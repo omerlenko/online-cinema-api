@@ -201,10 +201,33 @@ async def resend_activation_token(
     )
 
 
-@router.post("/login")
+@router.post(
+    "/login",
+    summary="Log in a registered user",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Provided email or password is incorrect",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Account is not activated",
+        },
+    },
+)
 async def login_user(
     db: DbDep, login_data: UserLoginRequestSchema
 ) -> UserLoginResponseSchema:
+    """
+    Log in a registered user if their email and password are correct.
+
+    User account must be activated to log in.
+
+    An unknown email and a wrong password return the same 401,
+    so the response does not reveal whether an email is registered.
+
+    Returns access and refresh tokens if login is successful.
+    """
     user = await get_user_by_email(db=db, email=login_data.email)
     if user is None:
         raise HTTPException(
@@ -217,7 +240,7 @@ async def login_user(
     if not user.is_active:
         raise HTTPException(
             status_code=403,
-            detail="User account must be active to log in",
+            detail="Account is not activated",
         )
 
     access_token = create_access_token(user_id=user.id)
@@ -229,19 +252,55 @@ async def login_user(
     )
 
 
-@router.get("/me")
+@router.get(
+    "/me",
+    summary="Get current user details",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User not active",
+        },
+    },
+)
 async def get_current_user_detail(
     current_user: CurrentUserDep,
 ) -> UserDetailResponseSchema:
+    """
+    Return current user details, including id, email and user group.
+    """
     return UserDetailResponseSchema(
         id=current_user.id, email=current_user.email, group_name=current_user.group.name
     )
 
 
-@router.post("/refresh")
+@router.post(
+    "/refresh",
+    summary="Get a new access token",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Refresh token is invalid, expired, revoked, "
+            "or not a refresh token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User not active",
+        },
+    },
+)
 async def refresh_access_token(
     db: DbDep, token_data: RefreshTokenRequestSchema
 ) -> RefreshTokenResponseSchema:
+    """
+    Exchange a valid refresh token for a new access token.
+
+    The refresh token is not replaced;
+    it stays valid until it expires or the user logs out.
+    """
     try:
         user_id = decode_token(token_data.refresh_token, TokenTypeEnum.REFRESH)
     except InvalidTokenError:
@@ -262,8 +321,19 @@ async def refresh_access_token(
     return RefreshTokenResponseSchema(access_token=create_access_token(user_id))
 
 
-@router.post("/logout", status_code=204)
+@router.post(
+    "/logout",
+    status_code=204,
+    summary="Log out user",
+)
 async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
+    """
+    Log out the user by deleting the provided refresh token.
+
+    Endpoint is idempotent - repeated requests will return 204.
+
+    The access token remains valid until it expires.
+    """
     refresh_token_object = await get_refresh_token_object_by_token(
         db=db, token=token_data.refresh_token
     )
