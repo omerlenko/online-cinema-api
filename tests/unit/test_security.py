@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone, timedelta
 
 import jwt
@@ -35,7 +36,7 @@ def test_decode_token_with_expired_token():
     expires_at = datetime.now(timezone.utc) - timedelta(days=1)
     refresh_token = create_refresh_token(user_id=1, expires_at=expires_at)
 
-    with pytest.raises(InvalidTokenError):
+    with pytest.raises(InvalidTokenError, match="Invalid token"):
         decode_token(refresh_token, TokenTypeEnum.REFRESH)
 
 
@@ -45,13 +46,14 @@ def test_decode_token_with_tampered_token():
         "sub": "1",
         "exp": expires_at,
         "iat": datetime.now(timezone.utc),
+        "jti": str(uuid.uuid4()),
         "type": "access",
     }
     access_token = jwt.encode(
         payload=payload, key="absolutely_wrong_secret_key_1234", algorithm="HS256"
     )
 
-    with pytest.raises(InvalidTokenError):
+    with pytest.raises(InvalidTokenError, match="Invalid token"):
         decode_token(access_token, TokenTypeEnum.ACCESS)
 
 
@@ -59,13 +61,14 @@ def test_decode_token_with_missing_claims():
     payload = {
         "sub": "1",
         "iat": datetime.now(timezone.utc),
+        "jti": str(uuid.uuid4()),
         "type": "access",
     }
     access_token = jwt.encode(
         payload=payload, key=settings.JWT_SECRET_KEY, algorithm="HS256"
     )
 
-    with pytest.raises(InvalidTokenError):
+    with pytest.raises(InvalidTokenError, match="Invalid token"):
         decode_token(access_token, TokenTypeEnum.ACCESS)
 
 
@@ -75,11 +78,14 @@ def test_decode_token_with_non_numeric_sub():
         "sub": "abc",
         "exp": expires_at,
         "iat": datetime.now(timezone.utc),
+        "jti": str(uuid.uuid4()),
         "type": "access",
     }
     access_token = jwt.encode(
         payload=payload, key=settings.JWT_SECRET_KEY, algorithm="HS256"
     )
 
-    with pytest.raises(InvalidTokenError):
+    with pytest.raises(
+        InvalidTokenError, match="User id in the payload is not numeric"
+    ):
         decode_token(access_token, TokenTypeEnum.ACCESS)

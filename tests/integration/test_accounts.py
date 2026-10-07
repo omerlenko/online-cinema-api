@@ -2,11 +2,11 @@ from datetime import datetime, timezone, timedelta
 from collections.abc import Callable, Awaitable
 
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from src.accounts.models import ActivationToken, UserGroupEnum
+from src.accounts.models import ActivationToken, UserGroupEnum, RefreshToken
 from src.accounts.models import User
 from src.core.config import get_settings
 from src.core.security import (
@@ -375,6 +375,23 @@ async def test_login_inactive_user(
     assert response.status_code == 403, "Expected status code 401 Unauthorized"
 
 
+async def test_login_user_twice(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    password = "Password12345!"
+    user = await create_user(password=password, is_active=True)
+    payload = {"email": user.email, "password": password}
+
+    response_1 = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+    assert response_1.status_code == 200, "Expected status code 200 OK"
+    response_2 = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+    assert response_2.status_code == 200, "Expected status code 200 OK"
+
+    response_data_1 = response_1.json()
+    response_data_2 = response_2.json()
+    assert response_data_1["refresh_token"] != response_data_2["refresh_token"]
+
+
 async def test_get_current_user_detail(
     client: AsyncClient, create_user: Callable[..., Awaitable[User]]
 ):
@@ -433,7 +450,9 @@ async def test_get_current_user_detail_with_expired_token(
 
 
 async def test_get_current_user_detail_for_deleted_user(
-    client: AsyncClient, create_user: Callable[..., Awaitable[User]], db_session
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
 ):
     user = await create_user(is_active=True)
     access_token = create_access_token(user.id)
@@ -453,3 +472,137 @@ async def test_get_current_user_detail_with_inactive_user(
     response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_headers(user))
 
     assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_refresh_access_token(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    user = await create_user(is_active=True)
+    refresh_token_object = await create_refresh_token_object(user_id=user.id)
+    payload = {"refresh_token": refresh_token_object.token}
+    response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    response_data = response.json()
+    assert "access_token" in response_data, "Access token not in response data"
+    assert "token_type" in response_data, "Token type not in response data"
+    assert (
+        decode_token(response_data["access_token"], TokenTypeEnum.ACCESS) == user.id
+    ), "User id not in access token payload"
+
+    auth_header = {"Authorization": f"Bearer {response_data["access_token"]}"}
+    me_response = await client.get(f"{ACCOUNTS_URL}/me", headers=auth_header)
+    assert me_response.status_code == 200, "Expected status code 200 OK"
+
+
+async def test_refresh_access_token_with_access_token(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    user = await create_user(is_active=True)
+    access_token = create_access_token(user.id)
+    payload = {"refresh_token": access_token}
+    response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_refresh_access_token_with_expired_refresh_token(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    user = await create_user(is_active=True)
+    expires_at = datetime.now(timezone.utc) - timedelta(days=1)
+    refresh_token_object = await create_refresh_token_object(
+        user_id=user.id, expires_at=expires_at
+    )
+    payload = {"refresh_token": refresh_token_object.token}
+    response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_refresh_access_token_with_no_refresh_token_in_db(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    user = await create_user(is_active=True)
+    expires_at = datetime.now(timezone.utc) + timedelta(days=1)
+    refresh_token = create_refresh_token(user.id, expires_at=expires_at)
+    payload = {"refresh_token": refresh_token}
+    response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_refresh_access_token_with_inactive_user(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    user = await create_user(is_active=False)
+    refresh_token_object = await create_refresh_token_object(user_id=user.id)
+    payload = {"refresh_token": refresh_token_object.token}
+    response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_logout_user(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    user = await create_user(is_active=True)
+    refresh_token_object = await create_refresh_token_object(user_id=user.id)
+    payload = {"refresh_token": refresh_token_object.token}
+    response = await client.post(f"{ACCOUNTS_URL}/logout", json=payload)
+
+    assert response.status_code == 204, "Expected status code 204 No Content"
+    assert (
+        await db_session.scalar(
+            select(exists().where(RefreshToken.token == refresh_token_object.token))
+        )
+        is False
+    )
+
+    payload = {"refresh_token": refresh_token_object.token}
+    refresh_response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+    assert refresh_response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_logout_user_with_multiple_refresh_tokens(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    user = await create_user(is_active=True)
+    refresh_token_object_1 = await create_refresh_token_object(user_id=user.id)
+    refresh_token_object_2 = await create_refresh_token_object(user_id=user.id)
+    payload = {"refresh_token": refresh_token_object_1.token}
+    response = await client.post(f"{ACCOUNTS_URL}/logout", json=payload)
+
+    assert response.status_code == 204, "Expected status code 204 No Content"
+
+    payload = {"refresh_token": refresh_token_object_2.token}
+    refresh_response = await client.post(f"{ACCOUNTS_URL}/refresh", json=payload)
+    assert refresh_response.status_code == 200, "Expected status code 200 OK"
+
+
+async def test_logout_user_twice(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    user = await create_user(is_active=True)
+    refresh_token_object = await create_refresh_token_object(user_id=user.id)
+    payload = {"refresh_token": refresh_token_object.token}
+    response = await client.post(f"{ACCOUNTS_URL}/logout", json=payload)
+
+    assert response.status_code == 204, "Expected status code 204 No Content"
+    response_2 = await client.post(f"{ACCOUNTS_URL}/logout", json=payload)
+    assert response_2.status_code == 204, "Expected status code 204 No Content"
