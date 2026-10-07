@@ -1,6 +1,5 @@
 from datetime import datetime, timezone, timedelta
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -20,6 +19,7 @@ from src.core.security import hash_password, generate_token, create_refresh_toke
 from src.database.base import Base
 from src.database.session import get_db
 from src.main import app
+from tests.helpers import FakeEmailSender
 
 settings = get_settings()
 TEST_DB_NAME = f"{settings.POSTGRES_DB}_test"
@@ -83,23 +83,6 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
-
-
-@dataclass
-class SentEmail:
-    to: str
-    subject: str
-    body: str
-
-
-class FakeEmailSender:
-
-    def __init__(self) -> None:
-        self.sent_emails: list[SentEmail] = []
-
-    def send_email(self, to: str, subject: str, body: str) -> None:
-        email = SentEmail(to, subject, body)
-        self.sent_emails.append(email)
 
 
 @pytest.fixture
