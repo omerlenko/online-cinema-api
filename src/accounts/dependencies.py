@@ -20,7 +20,7 @@ async def get_current_user(db: DbDep, credentials: BearerSchemeDep) -> User:
     except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = await get_user_by_id(db=db, id=user_id)
+    user = await get_user_by_id(db=db, user_id=user_id)
     if user is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 

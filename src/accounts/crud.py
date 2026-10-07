@@ -18,9 +18,9 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return user
 
 
-async def get_user_by_id(db: AsyncSession, id: int) -> User | None:
+async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     user = await db.scalar(
-        select(User).options(joinedload(User.group)).where(User.id == id)
+        select(User).options(joinedload(User.group)).where(User.id == user_id)
     )
     return user
 
@@ -95,3 +95,19 @@ async def create_refresh_token_object(
     await db.flush()
     await db.refresh(refresh_token)
     return refresh_token
+
+
+async def get_refresh_token_object_by_token(
+    db: AsyncSession, token: str
+) -> RefreshToken | None:
+    refresh_token = await db.scalar(
+        select(RefreshToken).where(RefreshToken.token == token)
+    )
+    return refresh_token
+
+
+async def delete_refresh_token_object(
+    db: AsyncSession, refresh_token_object: RefreshToken
+) -> None:
+    await db.delete(refresh_token_object)
+    await db.flush()

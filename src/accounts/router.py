@@ -18,6 +18,8 @@ from src.accounts.crud import (
     get_activation_token_by_user_id,
     delete_activation_token,
     create_refresh_token_object,
+    get_refresh_token_object_by_token,
+    delete_refresh_token_object,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -28,10 +30,15 @@ from src.accounts.schemas import (
     UserLoginRequestSchema,
     UserLoginResponseSchema,
     UserDetailResponseSchema,
+    RefreshTokenRequestSchema,
+    RefreshTokenResponseSchema,
 )
 from src.core.security import (
     verify_hashed_password,
     create_access_token,
+    decode_token,
+    TokenTypeEnum,
+    InvalidTokenError,
 )
 from src.database.session import DbDep
 
@@ -129,7 +136,7 @@ async def activate_user(
             status_code=400, detail="Invalid or expired activation token"
         )
 
-    user = await get_user_by_id(db=db, id=activation_token.user_id)
+    user = await get_user_by_id(db=db, user_id=activation_token.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -229,3 +236,39 @@ async def get_current_user_detail(
     return UserDetailResponseSchema(
         id=current_user.id, email=current_user.email, group_name=current_user.group.name
     )
+
+
+@router.post("/refresh")
+async def refresh_access_token(
+    db: DbDep, token_data: RefreshTokenRequestSchema
+) -> RefreshTokenResponseSchema:
+    try:
+        user_id = decode_token(token_data.refresh_token, TokenTypeEnum.REFRESH)
+    except InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    token_object = await get_refresh_token_object_by_token(
+        db=db, token=token_data.refresh_token
+    )
+    if token_object is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    user = await get_user_by_id(db=db, user_id=user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="User not active")
+
+    return RefreshTokenResponseSchema(access_token=create_access_token(user_id))
+
+
+@router.post("/logout", status_code=204)
+async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
+    refresh_token_object = await get_refresh_token_object_by_token(
+        db=db, token=token_data.refresh_token
+    )
+    if refresh_token_object is None:
+        return
+
+    await delete_refresh_token_object(db=db, refresh_token_object=refresh_token_object)
+    await db.commit()

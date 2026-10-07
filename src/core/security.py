@@ -1,4 +1,5 @@
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
@@ -37,6 +38,7 @@ def _create_jwt_token(
         "sub": str(user_id),
         "exp": expires_at,
         "iat": datetime.now(timezone.utc),
+        "jti": str(uuid.uuid4()),
         "type": token_type.value,
     }
     return jwt.encode(
@@ -65,7 +67,7 @@ def decode_token(token: str, expected_type: TokenTypeEnum) -> int:
             token,
             key=settings.JWT_SECRET_KEY,
             algorithms=[settings.JWT_ALGORITHM],
-            options={"require": ["sub", "exp", "iat", "type"]},
+            options={"require": ["sub", "exp", "iat", "type", "jti"]},
         )
     except jwt.InvalidTokenError as exc:
         raise InvalidTokenError("Invalid token") from exc

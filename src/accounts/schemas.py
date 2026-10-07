@@ -46,7 +46,7 @@ class MessageResponseSchema(BaseModel):
 
 
 class UserLoginRequestSchema(BaseEmailPasswordSchema):
-    password: str
+    password: str = Field(examples=["Password12345!"])
 
 
 class UserLoginResponseSchema(BaseModel):
@@ -59,3 +59,12 @@ class UserDetailResponseSchema(BaseModel):
     id: int
     email: str
     group_name: str
+
+
+class RefreshTokenRequestSchema(BaseModel):
+    refresh_token: str
+
+
+class RefreshTokenResponseSchema(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
