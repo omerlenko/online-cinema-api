@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     BASE_URL: str = "http://127.0.0.1:8000"
     API_VERSION_PREFIX: str = "/api/v1"
     ACTIVATION_TOKEN_LIFETIME_DAYS: int = 1
+    DOCS_REQUIRE_AUTH: bool = True
 
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
