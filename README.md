@@ -44,7 +44,7 @@ This starts PostgreSQL and Mailpit, waits until the database is healthy, applies
 API.
 
 - API: http://localhost:8000
-- Interactive docs: http://localhost:8000/docs
+- Interactive docs: http://localhost:8000/docs (open by default in local development, see `DOCS_REQUIRE_AUTH`)
 - Health check (includes database connectivity): http://localhost:8000/health
 - Mailpit (catches all outgoing emails, e.g. activation links): http://localhost:8025
 
@@ -72,6 +72,14 @@ docker compose run --rm app alembic current  # run a one-off command in the app 
 - **Logout:** `POST /accounts/logout` deletes the refresh token. Each login creates its own refresh token, so logging
   out on one device does not affect others.
 
+## API Documentation Access
+
+Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) can be restricted to registered users.
+
+- With `DOCS_REQUIRE_AUTH=True` (the default when the variable is not set), the browser asks for an email and password
+  via HTTP Basic authentication. Any active account is accepted.
+- `.env.example` sets `DOCS_REQUIRE_AUTH=False`, so the docs are open in local development.
+
 ## Security Decisions and Known Limitations
 
 - **Passwords** are hashed with Argon2 and never stored or returned in plain text.
@@ -91,6 +99,8 @@ docker compose run --rm app alembic current  # run a one-off command in the app 
 - **No refresh token rotation or reuse detection.** A stolen refresh token stays valid until it expires or the user logs
   out.
 - **Inactive accounts** cannot log in, refresh, or use existing access tokens.
+- **API documentation** is protected with HTTP Basic authentication when `DOCS_REQUIRE_AUTH` is enabled. Basic
+  credentials are sent with every request, so this relies on HTTPS in production.
 
 ## Configuration
 
@@ -112,6 +122,7 @@ All settings are read from environment variables, loaded from `.env` for local d
 | `BASE_URL`                          | Public base URL used in links sent by email     | `http://127.0.0.1:8000` |
 | `API_VERSION_PREFIX`                | Prefix for all API routes                       | `/api/v1`               |
 | `ACTIVATION_TOKEN_LIFETIME_DAYS`    | Lifetime of account activation links            | `1`                     |
+| `DOCS_REQUIRE_AUTH`                 | Require login to view the API documentation     | `False`                 |
 | `JWT_SECRET_KEY`                    | Secret used to sign JWTs (required, 32+ chars)  | —                       |
 | `JWT_ALGORITHM`                     | JWT signing algorithm                           | `HS256`                 |
 | `JWT_ACCESS_TOKEN_LIFETIME_MINUTES` | Access token lifetime                           | `15`                    |
