@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 from collections.abc import AsyncIterator, Awaitable, Callable
 
 import pytest
+from pytest import MonkeyPatch
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text, insert, select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
@@ -86,7 +87,7 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
-def fake_email_sender(monkeypatch):
+def fake_email_sender(monkeypatch: MonkeyPatch):
     fake = FakeEmailSender()
     monkeypatch.setitem(
         app.dependency_overrides,
@@ -163,3 +164,11 @@ def create_refresh_token_object(
         return refresh_token
 
     return _create_refresh_token_object
+
+
+@pytest.fixture
+def toggle_docs_auth(monkeypatch: MonkeyPatch) -> Callable[[bool], None]:
+    def _toggle_docs_auth(is_enabled: bool) -> None:
+        monkeypatch.setattr(settings, "DOCS_REQUIRE_AUTH", is_enabled)
+
+    return _toggle_docs_auth
