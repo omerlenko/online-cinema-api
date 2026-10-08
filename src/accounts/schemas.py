@@ -22,7 +22,7 @@ class BaseEmailPasswordSchema(BaseModel):
     password: Password = Field(
         description="8-32 characters with upper and lower case letters, "
         "a digit and a special character (@$!%*?#&).",
-        examples=["Password123!"],
+        examples=["Password12345!"],
     )
 
 
