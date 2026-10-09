@@ -1,14 +1,25 @@
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from src.accounts.models import UserGroup, UserGroupEnum, ActivationToken, RefreshToken
+from src.accounts.models import (
+    UserGroup,
+    UserGroupEnum,
+    ActivationToken,
+    RefreshToken,
+    PasswordResetToken,
+)
 from src.accounts.schemas import UserRegistrationRequestSchema
 from src.accounts.models import User
 from src.core.config import get_settings
-from src.core.security import hash_password, generate_token, create_refresh_token
+from src.core.security import (
+    hash_password,
+    generate_token,
+    create_refresh_token,
+    hash_token,
+)
 
 settings = get_settings()
 
@@ -110,4 +121,54 @@ async def delete_refresh_token_object(
     db: AsyncSession, refresh_token_object: RefreshToken
 ) -> None:
     await db.delete(refresh_token_object)
+    await db.flush()
+
+
+async def delete_refresh_token_objects_by_user_id(
+    db: AsyncSession, user_id: int, current_token: str | None = None
+) -> None:
+    """
+    Deletes all refresh tokens by user_id, or all except the current_token if present
+    """
+    if current_token:
+        await db.execute(
+            delete(RefreshToken)
+            .where(RefreshToken.user_id == user_id)
+            .where(RefreshToken.token != current_token)
+        )
+    else:
+        await db.execute(delete(RefreshToken).where(RefreshToken.user_id == user_id))
+    await db.flush()
+
+
+async def create_password_reset_token(
+    db: AsyncSession, user_id: int, plain_token: str
+) -> PasswordResetToken:
+    hashed_token = hash_token(plain_token)
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.PASSWORD_RESET_TOKEN_LIFETIME_MINUTES
+    )
+    password_reset_token = PasswordResetToken(
+        user_id=user_id, token=hashed_token, expires_at=expires_at
+    )
+    db.add(password_reset_token)
+    await db.flush()
+    return password_reset_token
+
+
+async def get_password_reset_token(
+    db: AsyncSession, token: str
+) -> PasswordResetToken | None:
+    password_reset_token = await db.scalar(
+        select(PasswordResetToken).where(PasswordResetToken.token == token)
+    )
+    return password_reset_token
+
+
+async def delete_password_reset_token_by_user_id(
+    db: AsyncSession, user_id: int
+) -> None:
+    await db.execute(
+        delete(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
+    )
     await db.flush()

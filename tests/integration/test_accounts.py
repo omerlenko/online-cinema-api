@@ -176,7 +176,7 @@ async def test_resend_activation_token_when_no_token_exists(
 ):
     inactive_user = await create_user(is_active=False)
     payload = {"email": inactive_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
 
@@ -211,7 +211,7 @@ async def test_resend_activation_token_when_token_expired(
         expires_at=datetime.now(timezone.utc) - timedelta(minutes=10),
     )
     payload = {"email": inactive_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
 
@@ -252,7 +252,7 @@ async def test_resend_activation_token_when_a_valid_token_exists(
         expires_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
     payload = {"email": inactive_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
 
@@ -284,7 +284,7 @@ async def test_resend_activation_with_unknown_email(
     payload = {
         "email": "unknown_user@example.com",
     }
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
     response_data = response.json()
@@ -303,7 +303,7 @@ async def test_resend_activation_to_already_active_user(
 ):
     active_user = await create_user(is_active=True)
     payload = {"email": active_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
     response_data = response.json()

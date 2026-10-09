@@ -20,6 +20,10 @@ from src.accounts.crud import (
     create_refresh_token_object,
     get_refresh_token_object_by_token,
     delete_refresh_token_object,
+    delete_refresh_token_objects_by_user_id,
+    create_password_reset_token,
+    delete_password_reset_token_by_user_id,
+    get_password_reset_token,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -32,6 +36,9 @@ from src.accounts.schemas import (
     UserDetailResponseSchema,
     RefreshTokenRequestSchema,
     RefreshTokenResponseSchema,
+    ChangePasswordRequestSchema,
+    ForgotPasswordRequestSchema,
+    ResetPasswordRequestSchema,
 )
 from src.core.security import (
     verify_hashed_password,
@@ -39,6 +46,9 @@ from src.core.security import (
     decode_token,
     TokenTypeEnum,
     InvalidTokenError,
+    hash_password,
+    generate_token,
+    hash_token,
 )
 from src.database.session import DbDep
 
@@ -71,7 +81,7 @@ async def register_user(
     Create an inactive user account and send an activation link by email.
 
     The link is valid for 24 hours. If it expires, request a new one via
-    `/resend_activation`.
+    `/resend-activation`.
     """
     existing_user = await get_user_by_email(db=db, email=data.email)
     if existing_user is not None:
@@ -127,7 +137,7 @@ async def activate_user(
 
     An already active account gets 200 OK with 'User already active', not an error.
 
-    An expired link gets 400, the user can use '/resend_activation'
+    An expired link gets 400, the user can use '/resend-activation'
     to get a new activation link.
     """
     activation_token = await get_activation_token(db=db, token=token)
@@ -154,7 +164,7 @@ async def activate_user(
 
 
 @router.post(
-    "/resend_activation",
+    "/resend-activation",
     summary="Resend activation email",
 )
 async def resend_activation_token(
@@ -342,3 +352,91 @@ async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
 
     await delete_refresh_token_object(db=db, refresh_token_object=refresh_token_object)
     await db.commit()
+
+
+@router.post("/change-password")
+async def change_password(
+    db: DbDep, password_data: ChangePasswordRequestSchema, current_user: CurrentUserDep
+) -> MessageResponseSchema:
+    if not verify_hashed_password(
+        password_data.old_password, current_user.hashed_password
+    ):
+        raise HTTPException(status_code=400, detail="The old password is incorrect")
+
+    if verify_hashed_password(password_data.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=400, detail="New password can not be the same as previous one"
+        )
+
+    current_user.hashed_password = hash_password(password_data.new_password)
+
+    await delete_refresh_token_objects_by_user_id(
+        db=db,
+        user_id=current_user.id,
+        current_token=password_data.refresh_token,
+    )
+    await db.commit()
+
+    return MessageResponseSchema(message="New password set successfully")
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    db: DbDep,
+    email_data: ForgotPasswordRequestSchema,
+    email_sender: EmailSenderDep,
+    background_tasks: BackgroundTasks,
+) -> MessageResponseSchema:
+    user = await get_user_by_email(db=db, email=email_data.email)
+    if user is None or not user.is_active:
+        return MessageResponseSchema(
+            message="If the email belongs to an active account, "
+            "password reset instructions have been sent"
+        )
+
+    await delete_password_reset_token_by_user_id(db=db, user_id=user.id)
+    plain_token = generate_token()
+    await create_password_reset_token(db=db, user_id=user.id, plain_token=plain_token)
+    await db.commit()
+
+    password_reset_email_body = (
+        f"Password reset token: {plain_token}\n\n"
+        f"Token is valid for {settings.PASSWORD_RESET_TOKEN_LIFETIME_MINUTES} minutes."
+    )
+    background_tasks.add_task(
+        email_sender.send_email,
+        to=user.email,
+        subject="Password reset token",
+        body=password_reset_email_body,
+    )
+
+    return MessageResponseSchema(
+        message="If the email belongs to an active account, "
+        "password reset instructions have been sent"
+    )
+
+
+@router.post("/reset-password")
+async def reset_password(
+    db: DbDep, data: ResetPasswordRequestSchema
+) -> MessageResponseSchema:
+    plain_token = data.password_reset_token
+    hashed_token = hash_token(plain_token)
+
+    password_reset_token = await get_password_reset_token(db=db, token=hashed_token)
+    if password_reset_token is None or password_reset_token.expires_at <= datetime.now(
+        timezone.utc
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user = await get_user_by_id(db=db, user_id=password_reset_token.user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.hashed_password = hash_password(data.new_password)
+
+    await delete_refresh_token_objects_by_user_id(db=db, user_id=user.id)
+    await delete_password_reset_token_by_user_id(db=db, user_id=user.id)
+    await db.commit()
+
+    return MessageResponseSchema(message="Password reset successfully")

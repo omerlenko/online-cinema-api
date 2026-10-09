@@ -68,3 +68,18 @@ class RefreshTokenRequestSchema(BaseModel):
 class RefreshTokenResponseSchema(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class ChangePasswordRequestSchema(BaseModel):
+    old_password: str
+    new_password: Password
+    refresh_token: str | None = None
+
+
+class ForgotPasswordRequestSchema(BaseModel):
+    email: Email
+
+
+class ResetPasswordRequestSchema(BaseModel):
+    new_password: Password
+    password_reset_token: str
