@@ -1,12 +1,18 @@
 from datetime import datetime, timezone, timedelta
-from collections.abc import Callable, Awaitable
+from collections.abc import Callable, Awaitable, Coroutine
+from typing import Any
 
 from httpx import AsyncClient
 from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from src.accounts.models import ActivationToken, UserGroupEnum, RefreshToken
+from src.accounts.models import (
+    ActivationToken,
+    UserGroupEnum,
+    RefreshToken,
+    PasswordResetToken,
+)
 from src.accounts.models import User
 from src.core.config import get_settings
 from src.core.security import (
@@ -16,15 +22,16 @@ from src.core.security import (
     create_refresh_token,
     _create_jwt_token,
     create_access_token,
+    hash_token,
 )
-from tests.helpers import auth_headers
+from tests.helpers import auth_headers, FakeEmailSender, extract_reset_token_from_email
 
 settings = get_settings()
 ACCOUNTS_URL = f"{settings.API_VERSION_PREFIX}/accounts"
 
 
 async def test_register_user(
-    client: AsyncClient, db_session: AsyncSession, fake_email_sender
+    client: AsyncClient, db_session: AsyncSession, fake_email_sender: FakeEmailSender
 ):
     payload = {
         "email": "test_user@example.com",
@@ -103,10 +110,10 @@ async def test_activate_user(
     client: AsyncClient,
     db_session: AsyncSession,
     create_user: Callable[..., Awaitable[User]],
-    create_token: Callable[..., Awaitable[ActivationToken]],
+    create_activation_token: Callable[..., Awaitable[ActivationToken]],
 ):
     inactive_user = await create_user(is_active=False)
-    activation_token = await create_token(user_id=inactive_user.id)
+    activation_token = await create_activation_token(user_id=inactive_user.id)
 
     response = await client.get(
         f"{ACCOUNTS_URL}/activate", params={"token": activation_token.token}
@@ -124,10 +131,10 @@ async def test_activate_user(
 async def test_activate_already_active_user(
     client: AsyncClient,
     create_user: Callable[..., Awaitable[User]],
-    create_token: Callable[..., Awaitable[ActivationToken]],
+    create_activation_token: Callable[..., Awaitable[ActivationToken]],
 ):
     active_user = await create_user(is_active=True)
-    activation_token = await create_token(user_id=active_user.id)
+    activation_token = await create_activation_token(user_id=active_user.id)
 
     response = await client.get(
         f"{ACCOUNTS_URL}/activate", params={"token": activation_token.token}
@@ -143,10 +150,10 @@ async def test_activate_already_active_user(
 async def test_activate_user_with_expired_token(
     client: AsyncClient,
     create_user: Callable[..., Awaitable[User]],
-    create_token: Callable[..., Awaitable[ActivationToken]],
+    create_activation_token: Callable[..., Awaitable[ActivationToken]],
 ):
     inactive_user = await create_user(is_active=False)
-    expired_activation_token = await create_token(
+    expired_activation_token = await create_activation_token(
         user_id=inactive_user.id,
         expires_at=datetime.now(timezone.utc) - timedelta(minutes=10),
     )
@@ -172,11 +179,11 @@ async def test_resend_activation_token_when_no_token_exists(
     client: AsyncClient,
     db_session: AsyncSession,
     create_user: Callable[..., Awaitable[User]],
-    fake_email_sender,
+    fake_email_sender: FakeEmailSender,
 ):
     inactive_user = await create_user(is_active=False)
     payload = {"email": inactive_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
 
@@ -202,16 +209,16 @@ async def test_resend_activation_token_when_token_expired(
     client: AsyncClient,
     db_session: AsyncSession,
     create_user: Callable[..., Awaitable[User]],
-    create_token: Callable[..., Awaitable[ActivationToken]],
-    fake_email_sender,
+    create_activation_token: Callable[..., Awaitable[ActivationToken]],
+    fake_email_sender: FakeEmailSender,
 ):
     inactive_user = await create_user(is_active=False)
-    expired_activation_token = await create_token(
+    expired_activation_token = await create_activation_token(
         user_id=inactive_user.id,
         expires_at=datetime.now(timezone.utc) - timedelta(minutes=10),
     )
     payload = {"email": inactive_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
 
@@ -243,16 +250,16 @@ async def test_resend_activation_token_when_a_valid_token_exists(
     client: AsyncClient,
     db_session: AsyncSession,
     create_user: Callable[..., Awaitable[User]],
-    create_token: Callable[..., Awaitable[ActivationToken]],
-    fake_email_sender,
+    create_activation_token: Callable[..., Awaitable[ActivationToken]],
+    fake_email_sender: FakeEmailSender,
 ):
     inactive_user = await create_user(is_active=False)
-    valid_activation_token = await create_token(
+    valid_activation_token = await create_activation_token(
         user_id=inactive_user.id,
         expires_at=datetime.now(timezone.utc) + timedelta(days=1),
     )
     payload = {"email": inactive_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
 
@@ -279,12 +286,12 @@ async def test_resend_activation_token_when_a_valid_token_exists(
 
 async def test_resend_activation_with_unknown_email(
     client: AsyncClient,
-    fake_email_sender,
+    fake_email_sender: FakeEmailSender,
 ):
     payload = {
         "email": "unknown_user@example.com",
     }
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
     response_data = response.json()
@@ -299,11 +306,11 @@ async def test_resend_activation_with_unknown_email(
 async def test_resend_activation_to_already_active_user(
     client: AsyncClient,
     create_user: Callable[..., Awaitable[User]],
-    fake_email_sender,
+    fake_email_sender: FakeEmailSender,
 ):
     active_user = await create_user(is_active=True)
     payload = {"email": active_user.email}
-    response = await client.post(f"{ACCOUNTS_URL}/resend_activation", json=payload)
+    response = await client.post(f"{ACCOUNTS_URL}/resend-activation", json=payload)
 
     assert response.status_code == 200, "Expected status code 200 OK"
     response_data = response.json()
@@ -455,8 +462,7 @@ async def test_get_current_user_detail_for_deleted_user(
     create_user: Callable[..., Awaitable[User]],
 ):
     user = await create_user(is_active=True)
-    access_token = create_access_token(user.id)
-    auth_header = {"Authorization": f"Bearer {access_token}"}
+    auth_header = auth_headers(user)
 
     await db_session.delete(user)
     await db_session.flush()
@@ -606,3 +612,350 @@ async def test_logout_user_twice(
     assert response.status_code == 204, "Expected status code 204 No Content"
     response_2 = await client.post(f"{ACCOUNTS_URL}/logout", json=payload)
     assert response_2.status_code == 204, "Expected status code 204 No Content"
+
+
+async def test_change_password(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    old_password = "OldPassword123!"
+    new_password = "NewPassword123!"
+    payload = {
+        "old_password": old_password,
+        "new_password": new_password,
+    }
+    user = await create_user(password=old_password, is_active=True)
+    await create_refresh_token_object(user.id)
+    await create_refresh_token_object(user.id)
+    await create_refresh_token_object(user.id)
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/change-password", json=payload, headers=auth_headers(user)
+    )
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+    await db_session.refresh(user)
+    assert not verify_hashed_password(old_password, user.hashed_password)
+    assert verify_hashed_password(new_password, user.hashed_password)
+    assert not await db_session.scalar(
+        select(exists().where(RefreshToken.user_id == user.id))
+    )
+
+
+async def test_change_password_keeps_current_session(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+):
+    old_password = "OldPassword123!"
+    new_password = "NewPassword123!"
+    user = await create_user(password=old_password, is_active=True)
+    refresh_token_1 = await create_refresh_token_object(user.id)
+    await create_refresh_token_object(user.id)
+    await create_refresh_token_object(user.id)
+    payload = {
+        "old_password": old_password,
+        "new_password": new_password,
+        "refresh_token": refresh_token_1.token,
+    }
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/change-password", json=payload, headers=auth_headers(user)
+    )
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    stmt = select(RefreshToken).where(RefreshToken.user_id == user.id)
+    result = await db_session.scalars(stmt)
+    refresh_tokens = result.all()
+    assert len(refresh_tokens) == 1
+    assert refresh_tokens[0].id == refresh_token_1.id
+
+
+async def test_change_password_wrong_old_password(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    old_password = "OldPassword123!"
+    new_password = "NewPassword123!"
+    payload = {
+        "old_password": "WrongPassword123!",
+        "new_password": new_password,
+    }
+    user = await create_user(password=old_password, is_active=True)
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/change-password", json=payload, headers=auth_headers(user)
+    )
+
+    assert response.status_code == 400, "Expected status code 400 Bad Request"
+
+
+async def test_change_password_new_equals_old_password(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    old_password = "OldPassword123!"
+    new_password = "OldPassword123!"
+    payload = {
+        "old_password": old_password,
+        "new_password": new_password,
+    }
+    user = await create_user(password=old_password, is_active=True)
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/change-password", json=payload, headers=auth_headers(user)
+    )
+
+    assert response.status_code == 400, "Expected status code 400 Bad Request"
+
+
+async def test_change_password_weak_new_password(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    old_password = "OldPassword123!"
+    new_password = "password"
+    payload = {
+        "old_password": old_password,
+        "new_password": new_password,
+    }
+    user = await create_user(password=old_password, is_active=True)
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/change-password", json=payload, headers=auth_headers(user)
+    )
+
+    assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
+
+
+async def test_change_password_no_access_token(
+    client: AsyncClient,
+):
+    old_password = "OldPassword123!"
+    new_password = "NewPassword123!"
+    payload = {
+        "old_password": old_password,
+        "new_password": new_password,
+    }
+
+    response = await client.post(f"{ACCOUNTS_URL}/change-password", json=payload)
+
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_forgot_password(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    fake_email_sender: FakeEmailSender,
+    create_user: Callable[..., Awaitable[User]],
+):
+    email = "user@example.com"
+    user = await create_user(email=email, is_active=True)
+    payload = {"email": "user@example.com"}
+
+    response = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    assert len(fake_email_sender.sent_emails) == 1, "The amount of sent emails is not 1"
+    sent_email = fake_email_sender.sent_emails[0]
+
+    plain_token = extract_reset_token_from_email(sent_email.body)
+    stored_token = await db_session.scalar(
+        select(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+    )
+    assert stored_token is not None, "PasswordResetToken does not exist in the database"
+    assert stored_token.token != plain_token, "Stored token value equals plain token"
+    assert stored_token.token == hash_token(
+        plain_token
+    ), "Stored token value is not hashed"
+
+
+async def test_forgot_password_twice(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    fake_email_sender: FakeEmailSender,
+    create_user: Callable[..., Awaitable[User]],
+):
+    email = "user@example.com"
+    user = await create_user(email=email, is_active=True)
+    payload = {"email": "user@example.com"}
+
+    response_1 = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+    assert response_1.status_code == 200, "Expected status code 200 OK"
+    sent_email_1 = fake_email_sender.sent_emails[0]
+    plain_token_1 = extract_reset_token_from_email(sent_email_1.body)
+
+    response_2 = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+    assert response_2.status_code == 200, "Expected status code 200 OK"
+    sent_email_2 = fake_email_sender.sent_emails[1]
+    plain_token_2 = extract_reset_token_from_email(sent_email_2.body)
+
+    stmt = select(PasswordResetToken).where(PasswordResetToken.user_id == user.id)
+    result = await db_session.scalars(stmt)
+    reset_tokens = result.all()
+
+    assert len(reset_tokens) == 1
+    assert reset_tokens[0].token == hash_token(plain_token_2)
+
+    payload = {"new_password": "NewPassword123!", "password_reset_token": plain_token_1}
+    response_reset = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload)
+    assert response_reset.status_code == 400, "Expected status code 400 Bad Request"
+
+
+async def test_forgot_password_with_unknown_email(
+    client: AsyncClient,
+    fake_email_sender: FakeEmailSender,
+):
+    payload = {"email": "user@example.com"}
+    response = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert response.json()["message"] == (
+        "If the email belongs to an active account, "
+        "password reset instructions have been sent"
+    )
+    assert len(fake_email_sender.sent_emails) == 0, "The amount of sent emails is not 0"
+
+
+async def test_forgot_password_with_inactive_user(
+    client: AsyncClient,
+    fake_email_sender: FakeEmailSender,
+    create_user: Callable[..., Awaitable[User]],
+):
+    email = "user@example.com"
+    await create_user(email=email, is_active=False)
+    payload = {"email": "user@example.com"}
+    response = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert response.json()["message"] == (
+        "If the email belongs to an active account, "
+        "password reset instructions have been sent"
+    )
+    assert len(fake_email_sender.sent_emails) == 0, "The amount of sent emails is not 0"
+
+
+async def test_reset_password(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_refresh_token_object: Callable[..., Awaitable[RefreshToken]],
+    create_reset_token: Callable[
+        ..., Coroutine[Any, Any, tuple[PasswordResetToken, str]]
+    ],
+):
+    old_password = "OldPassword123!"
+    new_password = "NewPassword123!"
+    user = await create_user(password=old_password, is_active=True)
+    password_reset_token, plain_token = await create_reset_token(user_id=user.id)
+    await create_refresh_token_object(user.id)
+    await create_refresh_token_object(user.id)
+    payload = {
+        "new_password": new_password,
+        "password_reset_token": plain_token,
+    }
+
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload)
+
+    assert response.status_code == 200, "Expected status code 200 OK"
+    await db_session.refresh(user)
+    assert not verify_hashed_password(old_password, user.hashed_password)
+    assert verify_hashed_password(new_password, user.hashed_password)
+    assert not await db_session.scalar(
+        select(exists().where(PasswordResetToken.user_id == user.id))
+    )
+
+    stmt = select(RefreshToken).where(RefreshToken.user_id == user.id)
+    result = await db_session.scalars(stmt)
+    refresh_tokens = result.all()
+    assert len(refresh_tokens) == 0
+
+
+async def test_reset_password_twice(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_reset_token: Callable[
+        ..., Coroutine[Any, Any, tuple[PasswordResetToken, str]]
+    ],
+):
+    new_password = "NewPassword123!"
+    user = await create_user(is_active=True)
+    password_reset_token, plain_token = await create_reset_token(user_id=user.id)
+    payload = {
+        "new_password": new_password,
+        "password_reset_token": plain_token,
+    }
+
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload)
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload)
+    assert response.status_code == 400, "Expected status code 400 Bad Request"
+
+
+async def test_reset_password_with_expired_token(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_reset_token: Callable[
+        ..., Coroutine[Any, Any, tuple[PasswordResetToken, str]]
+    ],
+):
+    new_password = "NewPassword123!"
+    user = await create_user(is_active=True)
+    expires_at = datetime.now(timezone.utc) - timedelta(minutes=60)
+    password_reset_token, plain_token = await create_reset_token(
+        user_id=user.id, expires_at=expires_at
+    )
+    payload = {
+        "new_password": new_password,
+        "password_reset_token": plain_token,
+    }
+
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload)
+    assert response.status_code == 400, "Expected status code 400 Bad Request"
+
+
+async def test_reset_password_with_unknown_token(
+    client: AsyncClient,
+):
+    new_password = "NewPassword123!"
+    plain_token = "Unknown_Token"
+    payload = {
+        "new_password": new_password,
+        "password_reset_token": plain_token,
+    }
+
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload)
+    assert response.status_code == 400, "Expected status code 400 Bad Request"
+
+
+async def test_reset_password_with_weak_password(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_reset_token: Callable[
+        ..., Coroutine[Any, Any, tuple[PasswordResetToken, str]]
+    ],
+):
+    weak_password = "password"
+    user = await create_user(is_active=True)
+    password_reset_token, plain_token = await create_reset_token(user_id=user.id)
+    payload_1 = {
+        "new_password": weak_password,
+        "password_reset_token": plain_token,
+    }
+
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload_1)
+    assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
+
+    strong_password = "NewPassword123!"
+    payload_2 = {
+        "new_password": strong_password,
+        "password_reset_token": plain_token,
+    }
+    response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload_2)
+    assert response.status_code == 200, "Expected status code 200 OK"

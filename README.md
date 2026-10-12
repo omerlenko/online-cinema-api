@@ -17,6 +17,7 @@ async SQLAlchemy.
 - Login with JWT access and refresh tokens
 - Refreshing the access token, and logout that revokes the refresh token
 - Current user endpoint (`/accounts/me`)
+- Password change for logged-in users, and password reset via an emailed, single-use token
 
 ## Tech Stack
 
@@ -101,32 +102,41 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
 - **Inactive accounts** cannot log in, refresh, or use existing access tokens.
 - **API documentation** is protected with HTTP Basic authentication when `DOCS_REQUIRE_AUTH` is enabled. Basic
   credentials are sent with every request, so this relies on HTTPS in production.
+- **Password reset tokens** are stored hashed (SHA-256), work only once, and expire after 15 minutes. A new request
+  replaces the previous token. Activation and refresh tokens are stored unhashed, because their value to an attacker is
+  lower.
+- **Forgot password** returns the same response for every email, and only sends a token to registered, active accounts.
+- **Changing a password** logs out the user's other sessions; **resetting** it logs out all of them. Access tokens
+  already issued stay valid until they expire.
+- **Reset tokens are sent in the request body**, never in a URL, so they do not end up in server logs. With no frontend,
+  the email contains the token itself rather than a link.
 
 ## Configuration
 
 All settings are read from environment variables, loaded from `.env` for local development.
 
-| Variable                            | Description                                     | Local default           |
-|-------------------------------------|-------------------------------------------------|-------------------------|
-| `POSTGRES_DB`                       | Database name                                   | `cinema_db`             |
-| `POSTGRES_USER`                     | Database user                                   | `admin`                 |
-| `POSTGRES_PASSWORD`                 | Database password                               | —                       |
-| `POSTGRES_HOST`                     | Database host                                   | `localhost`             |
-| `POSTGRES_PORT`                     | Database port                                   | `5432`                  |
-| `SMTP_HOST`                         | SMTP server host                                | `localhost`             |
-| `SMTP_PORT`                         | SMTP server port                                | `1025`                  |
-| `SMTP_USER`                         | SMTP username (optional)                        | —                       |
-| `SMTP_PASSWORD`                     | SMTP password (optional)                        | —                       |
-| `SMTP_USE_TLS`                      | Use STARTTLS when connecting to the SMTP server | `False`                 |
-| `EMAIL_SENDER_ADDRESS`              | "From" address of outgoing emails               | `noreply@example.com`   |
-| `BASE_URL`                          | Public base URL used in links sent by email     | `http://127.0.0.1:8000` |
-| `API_VERSION_PREFIX`                | Prefix for all API routes                       | `/api/v1`               |
-| `ACTIVATION_TOKEN_LIFETIME_DAYS`    | Lifetime of account activation links            | `1`                     |
-| `DOCS_REQUIRE_AUTH`                 | Require login to view the API documentation     | `False`                 |
-| `JWT_SECRET_KEY`                    | Secret used to sign JWTs (required, 32+ chars)  | —                       |
-| `JWT_ALGORITHM`                     | JWT signing algorithm                           | `HS256`                 |
-| `JWT_ACCESS_TOKEN_LIFETIME_MINUTES` | Access token lifetime                           | `15`                    |
-| `JWT_REFRESH_TOKEN_LIFETIME_DAYS`   | Refresh token lifetime                          | `7`                     |
+| Variable                                | Description                                     | Local default           |
+|-----------------------------------------|-------------------------------------------------|-------------------------|
+| `POSTGRES_DB`                           | Database name                                   | `cinema_db`             |
+| `POSTGRES_USER`                         | Database user                                   | `admin`                 |
+| `POSTGRES_PASSWORD`                     | Database password                               | —                       |
+| `POSTGRES_HOST`                         | Database host                                   | `localhost`             |
+| `POSTGRES_PORT`                         | Database port                                   | `5432`                  |
+| `SMTP_HOST`                             | SMTP server host                                | `localhost`             |
+| `SMTP_PORT`                             | SMTP server port                                | `1025`                  |
+| `SMTP_USER`                             | SMTP username (optional)                        | —                       |
+| `SMTP_PASSWORD`                         | SMTP password (optional)                        | —                       |
+| `SMTP_USE_TLS`                          | Use STARTTLS when connecting to the SMTP server | `False`                 |
+| `EMAIL_SENDER_ADDRESS`                  | "From" address of outgoing emails               | `noreply@example.com`   |
+| `BASE_URL`                              | Public base URL used in links sent by email     | `http://127.0.0.1:8000` |
+| `API_VERSION_PREFIX`                    | Prefix for all API routes                       | `/api/v1`               |
+| `ACTIVATION_TOKEN_LIFETIME_DAYS`        | Lifetime of account activation links            | `1`                     |
+| `DOCS_REQUIRE_AUTH`                     | Require login to view the API documentation     | `False`                 |
+| `JWT_SECRET_KEY`                        | Secret used to sign JWTs (required, 32+ chars)  | —                       |
+| `JWT_ALGORITHM`                         | JWT signing algorithm                           | `HS256`                 |
+| `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`     | Access token lifetime                           | `15`                    |
+| `JWT_REFRESH_TOKEN_LIFETIME_DAYS`       | Refresh token lifetime                          | `7`                     |
+| `PASSWORD_RESET_TOKEN_LIFETIME_MINUTES` | Lifetime of password reset tokens               | `15`                    |
 
 When running in Docker Compose, the API container overrides `POSTGRES_HOST` to `db` and `SMTP_HOST` to `mailpit`.
 

@@ -1,3 +1,4 @@
+from hashlib import sha256
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -22,6 +23,13 @@ def verify_hashed_password(password: str, hashed_password: str) -> bool:
 
 def generate_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def hash_token(token: str) -> str:
+    token_bytes = token.encode("utf-8")
+    hash_object = sha256(token_bytes)
+    hashed_token = hash_object.hexdigest()
+    return hashed_token
 
 
 class TokenTypeEnum(str, Enum):

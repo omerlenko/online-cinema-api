@@ -46,6 +46,9 @@ class User(Base):
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete-orphan"
     )
+    password_reset_token: Mapped["PasswordResetToken | None"] = relationship(
+        "PasswordResetToken", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class TokenBase(Base):
@@ -71,3 +74,13 @@ class RefreshToken(TokenBase):
     __tablename__ = "refresh_tokens"
 
     user: Mapped[User] = relationship("User", back_populates="refresh_tokens")
+
+
+class PasswordResetToken(TokenBase):
+    __tablename__ = "password_reset_tokens"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), unique=True
+    )
+
+    user: Mapped[User] = relationship("User", back_populates="password_reset_token")

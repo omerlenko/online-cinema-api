@@ -14,12 +14,15 @@ from src.accounts.crud import (
     create_user,
     create_activation_token,
     get_activation_token,
-    get_user_by_id,
     get_activation_token_by_user_id,
     delete_activation_token,
     create_refresh_token_object,
     get_refresh_token_object_by_token,
     delete_refresh_token_object,
+    delete_refresh_token_objects_by_user_id,
+    create_password_reset_token,
+    delete_password_reset_token_by_user_id,
+    get_password_reset_token,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -32,6 +35,9 @@ from src.accounts.schemas import (
     UserDetailResponseSchema,
     RefreshTokenRequestSchema,
     RefreshTokenResponseSchema,
+    ChangePasswordRequestSchema,
+    ForgotPasswordRequestSchema,
+    ResetPasswordRequestSchema,
 )
 from src.core.security import (
     verify_hashed_password,
@@ -39,6 +45,9 @@ from src.core.security import (
     decode_token,
     TokenTypeEnum,
     InvalidTokenError,
+    hash_password,
+    generate_token,
+    hash_token,
 )
 from src.database.session import DbDep
 
@@ -71,7 +80,7 @@ async def register_user(
     Create an inactive user account and send an activation link by email.
 
     The link is valid for 24 hours. If it expires, request a new one via
-    `/resend_activation`.
+    `/resend-activation`.
     """
     existing_user = await get_user_by_email(db=db, email=data.email)
     if existing_user is not None:
@@ -110,10 +119,6 @@ async def register_user(
             "model": ErrorResponseSchema,
             "description": "Invalid or expired activation token",
         },
-        404: {
-            "model": ErrorResponseSchema,
-            "description": "User not found",
-        },
     },
 )
 async def activate_user(
@@ -127,7 +132,7 @@ async def activate_user(
 
     An already active account gets 200 OK with 'User already active', not an error.
 
-    An expired link gets 400, the user can use '/resend_activation'
+    An expired link gets 400, the user can use '/resend-activation'
     to get a new activation link.
     """
     activation_token = await get_activation_token(db=db, token=token)
@@ -136,10 +141,7 @@ async def activate_user(
             status_code=400, detail="Invalid or expired activation token"
         )
 
-    user = await get_user_by_id(db=db, user_id=activation_token.user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user = activation_token.user
     if user.is_active:
         return MessageResponseSchema(message="User already active")
 
@@ -154,7 +156,7 @@ async def activate_user(
 
 
 @router.post(
-    "/resend_activation",
+    "/resend-activation",
     summary="Resend activation email",
 )
 async def resend_activation_token(
@@ -262,7 +264,7 @@ async def login_user(
         },
         403: {
             "model": ErrorResponseSchema,
-            "description": "User not active",
+            "description": "User is not active",
         },
     },
 )
@@ -288,7 +290,7 @@ async def get_current_user_detail(
         },
         403: {
             "model": ErrorResponseSchema,
-            "description": "User not active",
+            "description": "User is not active",
         },
     },
 )
@@ -312,9 +314,7 @@ async def refresh_access_token(
     if token_object is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = await get_user_by_id(db=db, user_id=user_id)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    user = token_object.user
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User not active")
 
@@ -342,3 +342,145 @@ async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
 
     await delete_refresh_token_object(db=db, refresh_token_object=refresh_token_object)
     await db.commit()
+
+
+@router.post(
+    "/change-password",
+    summary="Change password",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "Old password is incorrect, "
+            "or new password is the same as old one",
+        },
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User is not active",
+        },
+    },
+)
+async def change_password(
+    db: DbDep, password_data: ChangePasswordRequestSchema, current_user: CurrentUserDep
+) -> MessageResponseSchema:
+    """
+    Set a new password if the old one is provided and valid.
+
+    Logs out all of the user’s sessions.
+
+    If refresh_token is provided, that session stays logged in.
+
+    Access tokens already issued remain valid until they expire.
+    """
+    if not verify_hashed_password(
+        password_data.old_password, current_user.hashed_password
+    ):
+        raise HTTPException(status_code=400, detail="The old password is incorrect")
+
+    if verify_hashed_password(password_data.new_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=400, detail="New password can not be the same as previous one"
+        )
+
+    current_user.hashed_password = hash_password(password_data.new_password)
+
+    await delete_refresh_token_objects_by_user_id(
+        db=db,
+        user_id=current_user.id,
+        current_token=password_data.refresh_token,
+    )
+    await db.commit()
+
+    return MessageResponseSchema(message="New password set successfully")
+
+
+@router.post(
+    "/forgot-password",
+    summary="Request password reset email",
+)
+async def forgot_password(
+    db: DbDep,
+    email_data: ForgotPasswordRequestSchema,
+    email_sender: EmailSenderDep,
+    background_tasks: BackgroundTasks,
+) -> MessageResponseSchema:
+    """
+    Request a password reset email containing a short-lived password reset token.
+
+    The token is valid for 15 minutes by default,
+    is single-use, and is used with /reset-password.
+
+    Each request replaces any previous token.
+
+    Endpoint returns identical message in all cases
+    to avoid revealing if an email is registered and active.
+    """
+    user = await get_user_by_email(db=db, email=email_data.email)
+    if user is None or not user.is_active:
+        return MessageResponseSchema(
+            message="If the email belongs to an active account, "
+            "password reset instructions have been sent"
+        )
+
+    await delete_password_reset_token_by_user_id(db=db, user_id=user.id)
+    plain_token = generate_token()
+    await create_password_reset_token(db=db, user_id=user.id, plain_token=plain_token)
+    await db.commit()
+
+    password_reset_email_body = (
+        f"Password reset token: {plain_token}\n\n"
+        f"Token is valid for {settings.PASSWORD_RESET_TOKEN_LIFETIME_MINUTES} minutes."
+    )
+    background_tasks.add_task(
+        email_sender.send_email,
+        to=user.email,
+        subject="Password reset token",
+        body=password_reset_email_body,
+    )
+
+    return MessageResponseSchema(
+        message="If the email belongs to an active account, "
+        "password reset instructions have been sent"
+    )
+
+
+@router.post(
+    "/reset-password",
+    summary="Reset password",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "Password reset token is invalid or expired",
+        },
+    },
+)
+async def reset_password(
+    db: DbDep, data: ResetPasswordRequestSchema
+) -> MessageResponseSchema:
+    """
+    Set a new password with a valid password reset token.
+
+    The token can be used once.
+
+    All of the user’s sessions are logged out.
+    """
+    plain_token = data.password_reset_token
+    hashed_token = hash_token(plain_token)
+
+    password_reset_token = await get_password_reset_token(db=db, token=hashed_token)
+    if password_reset_token is None or password_reset_token.expires_at <= datetime.now(
+        timezone.utc
+    ):
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    user = password_reset_token.user
+    user.hashed_password = hash_password(data.new_password)
+
+    await delete_refresh_token_objects_by_user_id(db=db, user_id=user.id)
+    await delete_password_reset_token_by_user_id(db=db, user_id=user.id)
+    await db.commit()
+
+    return MessageResponseSchema(message="Password reset successfully")

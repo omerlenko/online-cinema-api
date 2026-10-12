@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 
 from src.accounts.models import User
@@ -23,3 +24,9 @@ class FakeEmailSender:
     def send_email(self, to: str, subject: str, body: str) -> None:
         email = SentEmail(to, subject, body)
         self.sent_emails.append(email)
+
+
+def extract_reset_token_from_email(email_body: str) -> str:
+    match = re.search(r"Password reset token: (\S+)", email_body)
+    assert match is not None, "No password reset token found in the email body"
+    return match.group(1)

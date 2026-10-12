@@ -1,9 +1,11 @@
+from collections.abc import Awaitable, Callable
 from urllib.parse import urlparse, parse_qs
 
 from httpx import AsyncClient
 
+from src.accounts.models import User
 from src.core.config import get_settings
-from tests.helpers import FakeEmailSender
+from tests.helpers import FakeEmailSender, extract_reset_token_from_email
 
 settings = get_settings()
 ACCOUNTS_URL = f"{settings.API_VERSION_PREFIX}/accounts"
@@ -72,3 +74,77 @@ async def test_register_activate_login_me_refresh_logout(
         f"{ACCOUNTS_URL}/refresh", json=payload_refresh
     )
     assert response_refresh.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+async def test_login_change_forgot_reset_password(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    fake_email_sender: FakeEmailSender,
+):
+    email = "user@example.com"
+    original_password = "OriginalPassword12345!"
+    await create_user(email=email, password=original_password, is_active=True)
+
+    # login
+    payload_login = {"email": email, "password": original_password}
+    response_login = await client.post(f"{ACCOUNTS_URL}/login", json=payload_login)
+    assert response_login.status_code == 200, "Expected status code 200 OK"
+
+    # change password
+    access_token = response_login.json()["access_token"]
+    refresh_token = response_login.json()["refresh_token"]
+    auth_header = {"Authorization": f"Bearer {access_token}"}
+    changed_password = "ChangedPassword12345!"
+    payload_change_pass = {
+        "old_password": original_password,
+        "new_password": changed_password,
+        "refresh_token": refresh_token,
+    }
+    response_change_pass = await client.post(
+        f"{ACCOUNTS_URL}/change-password", json=payload_change_pass, headers=auth_header
+    )
+    assert response_change_pass.status_code == 200, "Expected status code 200 OK"
+    assert response_change_pass.json()["message"] == "New password set successfully"
+
+    # login with changed password
+    payload_login = {"email": email, "password": changed_password}
+    response_login = await client.post(f"{ACCOUNTS_URL}/login", json=payload_login)
+    assert response_login.status_code == 200, "Expected status code 200 OK"
+
+    # forgot password
+    payload_forgot_pass = {"email": email}
+    response_forgot_pass = await client.post(
+        f"{ACCOUNTS_URL}/forgot-password",
+        json=payload_forgot_pass,
+    )
+    assert response_forgot_pass.status_code == 200, "Expected status code 200 OK"
+    assert len(fake_email_sender.sent_emails) == 1, "The amount of sent emails is not 1"
+    sent_email = fake_email_sender.sent_emails[0]
+    plain_reset_token = extract_reset_token_from_email(sent_email.body)
+
+    # reset password
+    reset_password = "ResetPassword12345!"
+    payload_reset_pass = {
+        "new_password": reset_password,
+        "password_reset_token": plain_reset_token,
+    }
+    response_reset_pass = await client.post(
+        f"{ACCOUNTS_URL}/reset-password",
+        json=payload_reset_pass,
+    )
+    assert response_reset_pass.status_code == 200, "Expected status code 200 OK"
+
+    # login with reset password
+    payload_login = {"email": email, "password": reset_password}
+    response_login = await client.post(f"{ACCOUNTS_URL}/login", json=payload_login)
+    assert response_login.status_code == 200, "Expected status code 200 OK"
+
+    # login with changed password
+    payload_login = {"email": email, "password": changed_password}
+    response_login = await client.post(f"{ACCOUNTS_URL}/login", json=payload_login)
+    assert response_login.status_code == 401, "Expected status code 401 Unauthorized"
+
+    # login with original password
+    payload_login = {"email": email, "password": original_password}
+    response_login = await client.post(f"{ACCOUNTS_URL}/login", json=payload_login)
+    assert response_login.status_code == 401, "Expected status code 401 Unauthorized"

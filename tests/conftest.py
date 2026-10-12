@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Coroutine
+from typing import Any, Callable
 
 import pytest
 from pytest import MonkeyPatch
@@ -13,10 +14,16 @@ from src.accounts.models import (
     User,
     ActivationToken,
     RefreshToken,
+    PasswordResetToken,
 )
 from src.core.mailer import get_email_sender
 from src.core.config import get_settings
-from src.core.security import hash_password, generate_token, create_refresh_token
+from src.core.security import (
+    hash_password,
+    generate_token,
+    create_refresh_token,
+    hash_token,
+)
 from src.database.base import Base
 from src.database.session import get_db
 from src.main import app
@@ -87,7 +94,7 @@ async def client(db_session: AsyncSession) -> AsyncIterator[AsyncClient]:
 
 
 @pytest.fixture
-def fake_email_sender(monkeypatch: MonkeyPatch):
+def fake_email_sender(monkeypatch: MonkeyPatch) -> FakeEmailSender:
     fake = FakeEmailSender()
     monkeypatch.setitem(
         app.dependency_overrides,
@@ -122,10 +129,10 @@ def create_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]]:
 
 
 @pytest.fixture
-def create_token(
+def create_activation_token(
     db_session: AsyncSession,
 ) -> Callable[..., Awaitable[ActivationToken]]:
-    async def _create_token(
+    async def _create_activation_token(
         user_id: int,
         expires_at: datetime | None = None,
     ) -> ActivationToken:
@@ -141,7 +148,31 @@ def create_token(
         await db_session.flush()
         return activation_token
 
-    return _create_token
+    return _create_activation_token
+
+
+@pytest.fixture
+def create_reset_token(
+    db_session: AsyncSession,
+) -> Callable[..., Coroutine[Any, Any, tuple[PasswordResetToken, str]]]:
+    async def _create_reset_token(
+        user_id: int,
+        expires_at: datetime | None = None,
+    ) -> tuple[PasswordResetToken, str]:
+        plain_token = generate_token()
+        hashed_token = hash_token(plain_token)
+        if expires_at is None:
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                minutes=settings.PASSWORD_RESET_TOKEN_LIFETIME_MINUTES
+            )
+        password_reset_token = PasswordResetToken(
+            user_id=user_id, token=hashed_token, expires_at=expires_at
+        )
+        db_session.add(password_reset_token)
+        await db_session.flush()
+        return password_reset_token, plain_token
+
+    return _create_reset_token
 
 
 @pytest.fixture
