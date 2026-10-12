@@ -344,10 +344,37 @@ async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
     await db.commit()
 
 
-@router.post("/change-password")
+@router.post(
+    "/change-password",
+    summary="Change password",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "Old password is incorrect, "
+            "or new password is the same as old one",
+        },
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User is not active",
+        },
+    },
+)
 async def change_password(
     db: DbDep, password_data: ChangePasswordRequestSchema, current_user: CurrentUserDep
 ) -> MessageResponseSchema:
+    """
+    Set a new password if the old one is provided and valid.
+
+    Logs out all of the user’s sessions.
+
+    If refresh_token is provided, that session stays logged in.
+
+    Access tokens already issued remain valid until they expire.
+    """
     if not verify_hashed_password(
         password_data.old_password, current_user.hashed_password
     ):
@@ -370,13 +397,27 @@ async def change_password(
     return MessageResponseSchema(message="New password set successfully")
 
 
-@router.post("/forgot-password")
+@router.post(
+    "/forgot-password",
+    summary="Request password reset email",
+)
 async def forgot_password(
     db: DbDep,
     email_data: ForgotPasswordRequestSchema,
     email_sender: EmailSenderDep,
     background_tasks: BackgroundTasks,
 ) -> MessageResponseSchema:
+    """
+    Request a password reset email containing a short-lived password reset token.
+
+    The token is valid for 15 minutes by default,
+    is single-use, and is used with /reset-password.
+
+    Each request replaces any previous token.
+
+    Endpoint returns identical message in all cases
+    to avoid revealing if an email is registered and active.
+    """
     user = await get_user_by_email(db=db, email=email_data.email)
     if user is None or not user.is_active:
         return MessageResponseSchema(
@@ -406,10 +447,26 @@ async def forgot_password(
     )
 
 
-@router.post("/reset-password")
+@router.post(
+    "/reset-password",
+    summary="Reset password",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "Password reset token is invalid or expired",
+        },
+    },
+)
 async def reset_password(
     db: DbDep, data: ResetPasswordRequestSchema
 ) -> MessageResponseSchema:
+    """
+    Set a new password with a valid password reset token.
+
+    The token can be used once.
+
+    All of the user’s sessions are logged out.
+    """
     plain_token = data.password_reset_token
     hashed_token = hash_token(plain_token)
 
