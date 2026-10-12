@@ -72,7 +72,9 @@ async def create_activation_token(db: AsyncSession, user_id: int) -> ActivationT
 
 async def get_activation_token(db: AsyncSession, token: str) -> ActivationToken | None:
     activation_token = await db.scalar(
-        select(ActivationToken).where(ActivationToken.token == token)
+        select(ActivationToken)
+        .options(joinedload(ActivationToken.user))
+        .where(ActivationToken.token == token)
     )
     return activation_token
 
@@ -112,7 +114,9 @@ async def get_refresh_token_object_by_token(
     db: AsyncSession, token: str
 ) -> RefreshToken | None:
     refresh_token = await db.scalar(
-        select(RefreshToken).where(RefreshToken.token == token)
+        select(RefreshToken)
+        .options(joinedload(RefreshToken.user))
+        .where(RefreshToken.token == token)
     )
     return refresh_token
 
@@ -160,7 +164,9 @@ async def get_password_reset_token(
     db: AsyncSession, token: str
 ) -> PasswordResetToken | None:
     password_reset_token = await db.scalar(
-        select(PasswordResetToken).where(PasswordResetToken.token == token)
+        select(PasswordResetToken)
+        .options(joinedload(PasswordResetToken.user))
+        .where(PasswordResetToken.token == token)
     )
     return password_reset_token
 

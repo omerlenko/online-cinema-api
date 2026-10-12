@@ -14,7 +14,6 @@ from src.accounts.crud import (
     create_user,
     create_activation_token,
     get_activation_token,
-    get_user_by_id,
     get_activation_token_by_user_id,
     delete_activation_token,
     create_refresh_token_object,
@@ -120,10 +119,6 @@ async def register_user(
             "model": ErrorResponseSchema,
             "description": "Invalid or expired activation token",
         },
-        404: {
-            "model": ErrorResponseSchema,
-            "description": "User not found",
-        },
     },
 )
 async def activate_user(
@@ -146,10 +141,7 @@ async def activate_user(
             status_code=400, detail="Invalid or expired activation token"
         )
 
-    user = await get_user_by_id(db=db, user_id=activation_token.user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user = activation_token.user
     if user.is_active:
         return MessageResponseSchema(message="User already active")
 
@@ -272,7 +264,7 @@ async def login_user(
         },
         403: {
             "model": ErrorResponseSchema,
-            "description": "User not active",
+            "description": "User is not active",
         },
     },
 )
@@ -298,7 +290,7 @@ async def get_current_user_detail(
         },
         403: {
             "model": ErrorResponseSchema,
-            "description": "User not active",
+            "description": "User is not active",
         },
     },
 )
@@ -322,9 +314,7 @@ async def refresh_access_token(
     if token_object is None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    user = await get_user_by_id(db=db, user_id=user_id)
-    if user is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    user = token_object.user
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User not active")
 
@@ -429,10 +419,7 @@ async def reset_password(
     ):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    user = await get_user_by_id(db=db, user_id=password_reset_token.user_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user = password_reset_token.user
     user.hashed_password = hash_password(data.new_password)
 
     await delete_refresh_token_objects_by_user_id(db=db, user_id=user.id)
