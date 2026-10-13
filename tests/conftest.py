@@ -152,6 +152,28 @@ def create_activation_token(
 
 
 @pytest.fixture
+def create_refresh_token_object(
+    db_session: AsyncSession,
+) -> Callable[..., Awaitable[RefreshToken]]:
+    async def _create_refresh_token_object(
+        user_id: int, expires_at: datetime | None = None
+    ) -> RefreshToken:
+        if expires_at is None:
+            expires_at = datetime.now(timezone.utc) + timedelta(
+                days=settings.JWT_REFRESH_TOKEN_LIFETIME_DAYS
+            )
+        token = create_refresh_token(user_id, expires_at)
+        refresh_token = RefreshToken(
+            user_id=user_id, token=token, expires_at=expires_at
+        )
+        db_session.add(refresh_token)
+        await db_session.flush()
+        return refresh_token
+
+    return _create_refresh_token_object
+
+
+@pytest.fixture
 def create_reset_token(
     db_session: AsyncSession,
 ) -> Callable[..., Coroutine[Any, Any, tuple[PasswordResetToken, str]]]:
@@ -173,28 +195,6 @@ def create_reset_token(
         return password_reset_token, plain_token
 
     return _create_reset_token
-
-
-@pytest.fixture
-def create_refresh_token_object(
-    db_session: AsyncSession,
-) -> Callable[..., Awaitable[RefreshToken]]:
-    async def _create_refresh_token_object(
-        user_id: int, expires_at: datetime | None = None
-    ) -> RefreshToken:
-        if expires_at is None:
-            expires_at = datetime.now(timezone.utc) + timedelta(
-                days=settings.JWT_REFRESH_TOKEN_LIFETIME_DAYS
-            )
-        token = create_refresh_token(user_id, expires_at)
-        refresh_token = RefreshToken(
-            user_id=user_id, token=token, expires_at=expires_at
-        )
-        db_session.add(refresh_token)
-        await db_session.flush()
-        return refresh_token
-
-    return _create_refresh_token_object
 
 
 @pytest.fixture
