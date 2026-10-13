@@ -30,3 +30,17 @@ def extract_reset_token_from_email(email_body: str) -> str:
     match = re.search(r"Password reset token: (\S+)", email_body)
     assert match is not None, "No password reset token found in the email body"
     return match.group(1)
+
+
+class FakeTaskSession:
+    def __init__(self) -> None:
+        self.committed: bool = False
+
+    async def __aenter__(self) -> "FakeTaskSession":
+        return self
+
+    async def __aexit__(self, *exc_info) -> None:
+        return None
+
+    async def commit(self) -> None:
+        self.committed = True

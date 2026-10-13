@@ -18,12 +18,14 @@ async SQLAlchemy.
 - Refreshing the access token, and logout that revokes the refresh token
 - Current user endpoint (`/accounts/me`)
 - Password change for logged-in users, and password reset via an emailed, single-use token
+- Periodic cleanup of expired activation, refresh and password reset tokens
 
 ## Tech Stack
 
 - **Python 3.13**, **FastAPI**, **Pydantic v2**
 - **PostgreSQL 18**, **SQLAlchemy 2.0** (async) with **asyncpg**, **Alembic** for migrations
 - **JWT** authentication via **PyJWT**, **Argon2** password hashing via **pwdlib**
+- **Celery** with **Redis** as the broker, and **Celery beat** for scheduled tasks
 - **Docker** and **Docker Compose**, **Mailpit** for local email testing
 - **Poetry** for dependency management
 - **pytest** + **pytest-asyncio** + **pytest-cov** for testing
@@ -41,8 +43,8 @@ cp .env.example .env
 docker compose up --build
 ```
 
-This starts PostgreSQL and Mailpit, waits until the database is healthy, applies database migrations, and starts the
-API.
+This starts PostgreSQL, Redis and Mailpit, waits until the database is healthy, applies database migrations, and starts
+the API together with a Celery worker and Celery beat.
 
 - API: http://localhost:8000
 - Interactive docs: http://localhost:8000/docs (open by default in local development, see `DOCS_REQUIRE_AUTH`)
@@ -55,6 +57,7 @@ Useful commands:
 docker compose down                          # stop all services (data is kept)
 docker compose logs -f app                   # follow API logs
 docker compose run --rm app alembic current  # run a one-off command in the app image
+docker compose logs -f celery-worker celery-beat   # follow background task logs
 ```
 
 ### Trying it out
@@ -72,6 +75,23 @@ docker compose run --rm app alembic current  # run a one-off command in the app 
   for a new access token.
 - **Logout:** `POST /accounts/logout` deletes the refresh token. Each login creates its own refresh token, so logging
   out on one device does not affect others.
+
+## Background Tasks
+
+Celery beat schedules a cleanup task that a Celery worker runs every 60 minutes
+(`EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES`).
+It deletes expired activation, refresh and password reset tokens, and logs how many rows it removed.
+
+Run it by hand, without waiting for the schedule:
+
+```bash
+docker compose exec celery-worker celery -A src.celery_app call src.accounts.tasks.purge_expired_tokens
+```
+
+- Redis is used only as the Celery broker. Task results are not stored, and Redis is not published outside the Compose
+  network.
+- The worker and beat use the same image as the API, but skip the migration step.
+- Tasks use their own database engine without a connection pool, because every task run starts a new event loop.
 
 ## API Documentation Access
 
@@ -110,35 +130,41 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
   already issued stay valid until they expire.
 - **Reset tokens are sent in the request body**, never in a URL, so they do not end up in server logs. With no frontend,
   the email contains the token itself rather than a link.
+- **Expired tokens** are deleted by a scheduled task, so they do not pile up in the database. A link opened after the
+  cleanup gets the same "invalid or expired" response as before.
 
 ## Configuration
 
 All settings are read from environment variables, loaded from `.env` for local development.
 
-| Variable                                | Description                                     | Local default           |
-|-----------------------------------------|-------------------------------------------------|-------------------------|
-| `POSTGRES_DB`                           | Database name                                   | `cinema_db`             |
-| `POSTGRES_USER`                         | Database user                                   | `admin`                 |
-| `POSTGRES_PASSWORD`                     | Database password                               | —                       |
-| `POSTGRES_HOST`                         | Database host                                   | `localhost`             |
-| `POSTGRES_PORT`                         | Database port                                   | `5432`                  |
-| `SMTP_HOST`                             | SMTP server host                                | `localhost`             |
-| `SMTP_PORT`                             | SMTP server port                                | `1025`                  |
-| `SMTP_USER`                             | SMTP username (optional)                        | —                       |
-| `SMTP_PASSWORD`                         | SMTP password (optional)                        | —                       |
-| `SMTP_USE_TLS`                          | Use STARTTLS when connecting to the SMTP server | `False`                 |
-| `EMAIL_SENDER_ADDRESS`                  | "From" address of outgoing emails               | `noreply@example.com`   |
-| `BASE_URL`                              | Public base URL used in links sent by email     | `http://127.0.0.1:8000` |
-| `API_VERSION_PREFIX`                    | Prefix for all API routes                       | `/api/v1`               |
-| `ACTIVATION_TOKEN_LIFETIME_DAYS`        | Lifetime of account activation links            | `1`                     |
-| `DOCS_REQUIRE_AUTH`                     | Require login to view the API documentation     | `False`                 |
-| `JWT_SECRET_KEY`                        | Secret used to sign JWTs (required, 32+ chars)  | —                       |
-| `JWT_ALGORITHM`                         | JWT signing algorithm                           | `HS256`                 |
-| `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`     | Access token lifetime                           | `15`                    |
-| `JWT_REFRESH_TOKEN_LIFETIME_DAYS`       | Refresh token lifetime                          | `7`                     |
-| `PASSWORD_RESET_TOKEN_LIFETIME_MINUTES` | Lifetime of password reset tokens               | `15`                    |
+| Variable                                 | Description                                     | Local default           |
+|------------------------------------------|-------------------------------------------------|-------------------------|
+| `POSTGRES_DB`                            | Database name                                   | `cinema_db`             |
+| `POSTGRES_USER`                          | Database user                                   | `admin`                 |
+| `POSTGRES_PASSWORD`                      | Database password                               | —                       |
+| `POSTGRES_HOST`                          | Database host                                   | `localhost`             |
+| `POSTGRES_PORT`                          | Database port                                   | `5432`                  |
+| `SMTP_HOST`                              | SMTP server host                                | `localhost`             |
+| `SMTP_PORT`                              | SMTP server port                                | `1025`                  |
+| `SMTP_USER`                              | SMTP username (optional)                        | —                       |
+| `SMTP_PASSWORD`                          | SMTP password (optional)                        | —                       |
+| `SMTP_USE_TLS`                           | Use STARTTLS when connecting to the SMTP server | `False`                 |
+| `EMAIL_SENDER_ADDRESS`                   | "From" address of outgoing emails               | `noreply@example.com`   |
+| `BASE_URL`                               | Public base URL used in links sent by email     | `http://127.0.0.1:8000` |
+| `API_VERSION_PREFIX`                     | Prefix for all API routes                       | `/api/v1`               |
+| `ACTIVATION_TOKEN_LIFETIME_DAYS`         | Lifetime of account activation links            | `1`                     |
+| `DOCS_REQUIRE_AUTH`                      | Require login to view the API documentation     | `False`                 |
+| `JWT_SECRET_KEY`                         | Secret used to sign JWTs (required, 32+ chars)  | —                       |
+| `JWT_ALGORITHM`                          | JWT signing algorithm                           | `HS256`                 |
+| `JWT_ACCESS_TOKEN_LIFETIME_MINUTES`      | Access token lifetime                           | `15`                    |
+| `JWT_REFRESH_TOKEN_LIFETIME_DAYS`        | Refresh token lifetime                          | `7`                     |
+| `PASSWORD_RESET_TOKEN_LIFETIME_MINUTES`  | Lifetime of password reset tokens               | `15`                    |
+| `EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES` | How often expired tokens are deleted            | `60`                    |
+| `REDIS_HOST`                             | Redis host (Celery broker)                      | `localhost`             |
+| `REDIS_PORT`                             | Redis port                                      | `6379`                  |
 
-When running in Docker Compose, the API container overrides `POSTGRES_HOST` to `db` and `SMTP_HOST` to `mailpit`.
+When running in Docker Compose, the API container overrides `POSTGRES_HOST` to `db` and `SMTP_HOST` to `mailpit`. The
+Celery containers override `REDIS_HOST` to `redis`, and the worker also overrides `POSTGRES_HOST` to `db`.
 
 Generate a real `JWT_SECRET_KEY` with:
 
@@ -167,6 +193,8 @@ poetry run uvicorn src.main:app --reload
 ```
 
 Stop the API container first (`docker compose stop app`) if the full stack is running, since both use port 8000.
+The Celery worker and beat run only in Docker Compose. Running the API locally and running the tests need neither Celery
+nor Redis.
 
 ### Migrations
 
@@ -179,7 +207,7 @@ poetry run alembic check                                              # verify m
 ### Running tests
 
 Tests require PostgreSQL to be running (`docker compose up -d db`). A separate test database (`<POSTGRES_DB>_test`) is
-created automatically, and every test runs in a transaction that is rolled back afterwards. Emails are captured by a
+created automatically, and every test runs in a transaction that is rolled back afterward. Emails are captured by a
 fake sender, so no SMTP server is needed.
 
 ```bash
@@ -199,9 +227,11 @@ poetry run mypy .
 
 ```
 src/
-├── accounts/   # registration, activation, authentication: models, schemas, endpoints
-├── core/       # settings, security (hashing, JWT), email sending, shared schemas
-└── database/   # engine, sessions, declarative base
+├── accounts/       # registration, activation, authentication, token cleanup task
+├── core/           # settings, security (hashing, JWT), email sending, shared schemas
+├── database/       # engine, sessions, declarative base
+├── celery_app.py   # Celery app and beat schedule
+└── main.py         # FastAPI app, health check, protected docs
 migrations/     # Alembic database migrations
 commands/       # container entrypoint scripts
 tests/
