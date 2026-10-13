@@ -23,11 +23,15 @@ class Settings(BaseSettings):
     DOCS_REQUIRE_AUTH: bool = True
     ACTIVATION_TOKEN_LIFETIME_DAYS: int = 1
     PASSWORD_RESET_TOKEN_LIFETIME_MINUTES: int = 15
+    EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES: int = 60
 
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_LIFETIME_MINUTES: int = 15
     JWT_REFRESH_TOKEN_LIFETIME_DAYS: int = 7
+
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
 
     model_config = SettingsConfigDict(env_file=".env")
 
@@ -41,6 +45,10 @@ class Settings(BaseSettings):
             port=self.POSTGRES_PORT,
             database=self.POSTGRES_DB,
         )
+
+    @property
+    def REDIS_URL(self) -> str:
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
 
 
 @lru_cache

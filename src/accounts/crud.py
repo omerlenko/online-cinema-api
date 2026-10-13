@@ -1,6 +1,7 @@
 from datetime import datetime, timezone, timedelta
+from typing import cast, Any
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -178,3 +179,24 @@ async def delete_password_reset_token_by_user_id(
         delete(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
     )
     await db.flush()
+
+
+async def delete_expired_tokens(db: AsyncSession) -> int:
+    now = datetime.now(timezone.utc)
+    activation_token_stmt = delete(ActivationToken).where(
+        ActivationToken.expires_at <= now
+    )
+    refresh_token_stmt = delete(RefreshToken).where(RefreshToken.expires_at <= now)
+    reset_token_stmt = delete(PasswordResetToken).where(
+        PasswordResetToken.expires_at <= now
+    )
+
+    activation_token_result = await db.execute(activation_token_stmt)
+    refresh_token_result = await db.execute(refresh_token_stmt)
+    reset_token_result = await db.execute(reset_token_stmt)
+
+    activation_count = cast(CursorResult[Any], activation_token_result).rowcount
+    refresh_count = cast(CursorResult[Any], refresh_token_result).rowcount
+    reset_count = cast(CursorResult[Any], reset_token_result).rowcount
+
+    return activation_count + refresh_count + reset_count
