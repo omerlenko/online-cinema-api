@@ -7,8 +7,10 @@ from pydantic import (
     EmailStr,
     BeforeValidator,
     Field,
+    AliasPath,
 )
 
+from src.accounts.models import UserGroupEnum
 from src.accounts.validators import validate_password_complexity
 
 Password = Annotated[str, AfterValidator(validate_password_complexity)]
@@ -58,7 +60,10 @@ class UserLoginResponseSchema(BaseModel):
 class UserDetailResponseSchema(BaseModel):
     id: int
     email: str
-    group_name: str
+    group_name: str = Field(validation_alias=AliasPath("group", "name"))
+    is_active: bool
+
+    model_config = ConfigDict(from_attributes=True, validate_by_name=True)
 
 
 class RefreshTokenRequestSchema(BaseModel):
@@ -83,3 +88,7 @@ class ForgotPasswordRequestSchema(BaseModel):
 class ResetPasswordRequestSchema(BaseModel):
     new_password: Password
     password_reset_token: str
+
+
+class ChangeGroupRequestSchema(BaseModel):
+    group_name: UserGroupEnum
