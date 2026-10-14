@@ -1,3 +1,4 @@
+from collections.abc import Callable, Awaitable
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
@@ -9,7 +10,7 @@ from fastapi.security import (
 )
 
 from src.accounts.crud import get_user_by_id, get_user_by_email
-from src.accounts.models import User
+from src.accounts.models import User, UserGroupEnum
 from src.core.config import get_settings
 from src.core.security import (
     decode_token,
@@ -76,3 +77,20 @@ async def validate_docs_credentials(db: DbDep, credentials: BasicSchemeDep) -> N
 
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Inactive account")
+
+
+def require_groups(*allowed_groups: UserGroupEnum) -> Callable[..., Awaitable[User]]:
+    async def _require_groups(current_user: CurrentUserDep) -> User:
+        if current_user.group.name not in allowed_groups:
+            raise HTTPException(
+                403, detail="You do not have permission to perform this action"
+            )
+        return current_user
+
+    return _require_groups
+
+
+AdminUserDep = Annotated[User, Depends(require_groups(UserGroupEnum.ADMIN))]
+ModeratorUserDep = Annotated[
+    User, Depends(require_groups(UserGroupEnum.ADMIN, UserGroupEnum.MODERATOR))
+]
