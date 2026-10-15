@@ -10,7 +10,7 @@ COPY ./poetry.lock .
 COPY ./pyproject.toml .
 
 RUN pip install "poetry==2.4.3" &&\
-    poetry install --only main --no-interaction --no-ansi
+    poetry install --only main --no-interaction --no-ansi --compile
 
 COPY ./src ./src
 COPY ./migrations ./migrations
