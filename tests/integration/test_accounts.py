@@ -2,18 +2,22 @@ from datetime import datetime, timezone, timedelta
 from collections.abc import Callable, Awaitable, Coroutine
 from typing import Any
 
+import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from src.accounts.create_admin import create_admin
 from src.accounts.models import (
     ActivationToken,
     UserGroupEnum,
     RefreshToken,
     PasswordResetToken,
+    UserGroup,
 )
 from src.accounts.models import User
+from src.accounts.schemas import UserRegistrationRequestSchema
 from src.core.config import get_settings
 from src.core.security import (
     verify_hashed_password,
@@ -379,7 +383,7 @@ async def test_login_inactive_user(
     payload = {"email": inactive_user.email, "password": password}
     response = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
 
-    assert response.status_code == 403, "Expected status code 401 Unauthorized"
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
 
 
 async def test_login_user_twice(
@@ -959,3 +963,409 @@ async def test_reset_password_with_weak_password(
     }
     response = await client.post(f"{ACCOUNTS_URL}/reset-password", json=payload_2)
     assert response.status_code == 200, "Expected status code 200 OK"
+
+
+async def test_admin_activate_user(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    inactive_user = await create_user(
+        email="user@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{inactive_user.id}/activate",
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    await db_session.refresh(inactive_user)
+    assert inactive_user.is_active, "Inactive user was not activated"
+
+
+async def test_admin_activate_user_with_already_active_user(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    active_user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{active_user.id}/activate",
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+
+async def test_admin_activate_user_with_unknown_user(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/12345/activate",
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 404, "Expected status code 404 Not Found"
+
+
+async def test_admin_activate_user_with_no_access_token(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    inactive_user = await create_user(
+        email="user@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.post(f"{ACCOUNTS_URL}/users/{inactive_user.id}/activate")
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+@pytest.mark.parametrize(
+    "user_group",
+    [
+        UserGroupEnum.MODERATOR,
+        UserGroupEnum.USER,
+    ],
+)
+async def test_admin_activate_user_with_no_permission(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    user_group: UserGroupEnum,
+):
+    user = await create_user(
+        email="regular_user@example.com", is_active=True, user_group=user_group
+    )
+    inactive_user = await create_user(
+        email="user@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{inactive_user.id}/activate",
+        headers=auth_headers(user),
+    )
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_admin_change_group(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    regular_user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    payload = {"group_name": "moderator"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{regular_user.id}/change-group",
+        json=payload,
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    user = await db_session.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == regular_user.id)
+    )
+    assert user is not None, "User not found"
+    assert user.group.name == "moderator", "User group was not changed"
+
+
+async def test_admin_change_own_group(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    payload = {"group_name": "moderator"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{admin_user.id}/change-group",
+        json=payload,
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+    user = await db_session.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == admin_user.id)
+    )
+    assert user is not None, "User was not found"
+    assert user.group.name == "admin", "User group was changed"
+
+
+async def test_admin_demote_another_admin(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    admin_user_2 = await create_user(
+        email="admin2@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+
+    payload = {"group_name": "user"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{admin_user_2.id}/change-group",
+        json=payload,
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    user = await db_session.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == admin_user_2.id)
+    )
+    assert user is not None, "User not found"
+    assert user.group.name == "user", "User group was not changed"
+
+
+async def test_admin_change_group_to_same_group(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    moderator_user = await create_user(
+        email="moderator@example.com",
+        is_active=True,
+        user_group=UserGroupEnum.MODERATOR,
+    )
+
+    payload = {"group_name": "moderator"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{moderator_user.id}/change-group",
+        json=payload,
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+
+async def test_admin_change_group_with_unknown_user(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    payload = {"group_name": "admin"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/12345/change-group",
+        json=payload,
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 404, "Expected status code 404 Not Found"
+
+
+async def test_admin_change_group_with_no_access_token(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    regular_user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    payload = {"group_name": "admin"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{regular_user.id}/change-group",
+        json=payload,
+    )
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+
+@pytest.mark.parametrize(
+    "user_group",
+    [
+        UserGroupEnum.MODERATOR,
+        UserGroupEnum.USER,
+    ],
+)
+async def test_admin_change_group_with_no_permission(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    user_group: UserGroupEnum,
+):
+    caller = await create_user(
+        email="user1@example.com", is_active=True, user_group=user_group
+    )
+    target = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    payload = {"group_name": "moderator"}
+
+    response = await client.post(
+        f"{ACCOUNTS_URL}/users/{target.id}/change-group",
+        json=payload,
+        headers=auth_headers(caller),
+    )
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_create_admin_command(db_session: AsyncSession):
+    password = "Password12345!"
+    data = UserRegistrationRequestSchema(email="admin@example.com", password=password)
+    created_user = await create_admin(db=db_session, data=data)
+
+    admin_user = await db_session.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == created_user.id)
+    )
+    assert admin_user is not None, "The user is not found"
+    assert verify_hashed_password(
+        password, admin_user.hashed_password
+    ), "The password is invalid"
+    assert admin_user.is_active, "The user is not active"
+    assert (
+        admin_user.group.name == UserGroupEnum.ADMIN
+    ), "The user is not in the 'admin' group"
+
+
+async def test_create_admin_command_with_taken_email(
+    db_session: AsyncSession, create_user: Callable[..., Awaitable[User]]
+):
+    email = "admin@example.com"
+    password = "Password12345!"
+    await create_user(email=email, password=password)
+
+    data = UserRegistrationRequestSchema(email=email, password=password)
+
+    with pytest.raises(ValueError, match="A user with this email already exists"):
+        await create_admin(db=db_session, data=data)
+
+
+async def test_create_admin_command_with_no_admin_user_group(db_session: AsyncSession):
+    password = "Password12345!"
+    data = UserRegistrationRequestSchema(email="admin@example.com", password=password)
+
+    await db_session.execute(delete(UserGroup))
+    with pytest.raises(
+        ValueError, match="Admin group not found. Have the migrations been applied"
+    ):
+        await create_admin(db=db_session, data=data)
+
+
+async def test_list_users(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_1 = await create_user(
+        email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_2 = await create_user(
+        email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()]
+    assert response_ids == [
+        admin_user.id,
+        user_1.id,
+        user_2.id,
+    ], "Expected ids are not in the response."
+    assert response.json()[1] == {
+        "id": user_1.id,
+        "email": "user_1@example.com",
+        "group_name": "user",
+        "is_active": True,
+    }, "Response does not have the expected structure."
+
+
+async def test_list_users_filter_by_email(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    await create_user(
+        email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_2 = await create_user(
+        email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        params={"email": "user_2@example.com"},
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()]
+    assert response_ids == [user_2.id], "Expected ids are not in the response."
+
+
+async def test_list_users_with_limit_and_offset(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_1 = await create_user(
+        email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_2 = await create_user(
+        email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response_limit = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        params={"limit": 2, "offset": 0},
+        headers=auth_headers(admin_user),
+    )
+    assert response_limit.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response_limit.json()]
+    assert response_ids == [
+        admin_user.id,
+        user_1.id,
+    ], "Expected ids are not in the response."
+
+    response_offset = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        params={"limit": 2, "offset": 2},
+        headers=auth_headers(admin_user),
+    )
+    assert response_offset.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response_offset.json()]
+    assert response_ids == [user_2.id], "Expected id is not in the response."
+
+
+async def test_list_users_with_no_permission(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    regular_user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        headers=auth_headers(regular_user),
+    )
+    assert response.status_code == 403, "Expected status code 403 Forbidden"

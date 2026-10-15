@@ -19,6 +19,9 @@ async SQLAlchemy.
 - Current user endpoint (`/accounts/me`)
 - Password change for logged-in users, and password reset via an emailed, single-use token
 - Periodic cleanup of expired activation, refresh and password reset tokens
+- User groups (user, moderator, admin) with permission checks on protected endpoints
+- Admin endpoints to list users, activate accounts manually and change a user's group
+- Command to create the first admin account
 
 ## Tech Stack
 
@@ -76,6 +79,38 @@ docker compose logs -f celery-worker celery-beat   # follow background task logs
 - **Logout:** `POST /accounts/logout` deletes the refresh token. Each login creates its own refresh token, so logging
   out on one device does not affect others.
 
+## User Groups and Permissions
+
+Every account belongs to one group. New accounts start in `user`.
+
+| Group       | Can do                                                                                   |
+|-------------|------------------------------------------------------------------------------------------|
+| `user`      | Use their own account                                                                    |
+| `moderator` | Everything a user can do; will manage the movie catalog (coming next)                    |
+| `admin`     | Everything a moderator can do, plus list users, activate accounts and change user groups |
+
+Admin endpoints:
+
+- `GET /api/v1/accounts/users?limit=20&offset=0` lists users in id order, at most 100 per request. Add
+  `email=user@example.com` to look up one user.
+- `POST /api/v1/accounts/users/{user_id}/activate` activates an account without the email link.
+- `POST /api/v1/accounts/users/{user_id}/change-group` with `{"group_name": "moderator"}` moves a user to another group.
+  Admins can change any user's group except their own, including demoting other admins.
+
+The activate and change-group endpoints return the user's details, and repeating a request that changes nothing returns
+200 OK.
+
+### Creating the first admin
+
+Admin rights can only be granted by an existing admin, so the first admin is created from the server:
+
+```bash
+docker compose exec app python -m src.accounts.create_admin admin@example.com
+```
+
+The command asks for the password twice, applies the same rules as registration, and creates an account that is already
+active. When running the API locally, use `poetry run python -m src.accounts.create_admin admin@example.com` instead.
+
 ## Background Tasks
 
 Celery beat schedules a cleanup task that a Celery worker runs every 60 minutes
@@ -132,6 +167,14 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
   the email contains the token itself rather than a link.
 - **Expired tokens** are deleted by a scheduled task, so they do not pile up in the database. A link opened after the
   cleanup gets the same "invalid or expired" response as before.
+- **Groups are read from the database on every request**, not stored in the token. A promotion or demotion takes
+  effect on the user's next request, even with an access token issued earlier.
+- **Admins cannot change their own group**, so there is always at least one admin. One admin can, however, remove the
+  rights of all the others.
+- **The first admin is created on the server**, never through the API. The password is typed at a hidden prompt rather
+  than passed as an argument, so it does not end up in shell history.
+- **The user list uses `limit`/`offset` paging**, at most 100 users per request. It will move to the shared
+  pagination format when the movie catalog adds one.
 
 ## Configuration
 
@@ -227,7 +270,7 @@ poetry run mypy .
 
 ```
 src/
-├── accounts/       # registration, activation, authentication, token cleanup task
+├── accounts/       # registration, authentication, user groups, admin command, token cleanup task
 ├── core/           # settings, security (hashing, JWT), email sending, shared schemas
 ├── database/       # engine, sessions, declarative base
 ├── celery_app.py   # Celery app and beat schedule

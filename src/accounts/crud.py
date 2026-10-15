@@ -37,6 +37,22 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return user
 
 
+async def get_users(
+    db: AsyncSession, offset: int = 0, limit: int = 20, email: str | None = None
+) -> list[User]:
+    stmt = (
+        select(User)
+        .options(joinedload(User.group))
+        .order_by(User.id)
+        .offset(offset)
+        .limit(limit)
+    )
+    if email is not None:
+        stmt = stmt.where(User.email == email.strip().lower())
+    result = await db.scalars(stmt)
+    return list(result.all())
+
+
 async def get_user_group_by_name(
     db: AsyncSession, name: UserGroupEnum
 ) -> UserGroup | None:

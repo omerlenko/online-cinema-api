@@ -110,9 +110,10 @@ def create_user(db_session: AsyncSession) -> Callable[..., Awaitable[User]]:
         email: str = "user@example.com",
         password: str = "Password12345!",
         is_active: bool = False,
+        user_group: UserGroupEnum = UserGroupEnum.USER,
     ) -> User:
         group = await db_session.scalar(
-            select(UserGroup).where(UserGroup.name == UserGroupEnum.USER)
+            select(UserGroup).where(UserGroup.name == user_group)
         )
         assert group is not None
         user = User(

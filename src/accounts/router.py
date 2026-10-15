@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from sqlalchemy.exc import IntegrityError
 
-from src.accounts.dependencies import CurrentUserDep
+from src.accounts.dependencies import CurrentUserDep, AdminUserDep
 from src.core.schemas import ErrorResponseSchema
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
@@ -23,6 +23,8 @@ from src.accounts.crud import (
     create_password_reset_token,
     delete_password_reset_token_by_user_id,
     get_password_reset_token,
+    get_user_by_id,
+    get_users,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -38,6 +40,7 @@ from src.accounts.schemas import (
     ChangePasswordRequestSchema,
     ForgotPasswordRequestSchema,
     ResetPasswordRequestSchema,
+    ChangeGroupRequestSchema,
 )
 from src.core.security import (
     verify_hashed_password,
@@ -272,11 +275,10 @@ async def get_current_user_detail(
     current_user: CurrentUserDep,
 ) -> UserDetailResponseSchema:
     """
-    Return current user details, including id, email and user group.
+    Return current user details, including id, email, user group
+    and whether the account is active.
     """
-    return UserDetailResponseSchema(
-        id=current_user.id, email=current_user.email, group_name=current_user.group.name
-    )
+    return UserDetailResponseSchema.model_validate(current_user)
 
 
 @router.post(
@@ -484,3 +486,132 @@ async def reset_password(
     await db.commit()
 
     return MessageResponseSchema(message="Password reset successfully")
+
+
+@router.post(
+    "/users/{user_id}/activate",
+    summary="Activate a user’s account manually",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin, or their account is inactive.",
+        },
+        404: {
+            "model": ErrorResponseSchema,
+            "description": "User is not found.",
+        },
+    },
+)
+async def admin_activate_user(
+    db: DbDep,
+    user_id: int,
+    admin: AdminUserDep,
+) -> UserDetailResponseSchema:
+    """
+    Activate a user's account without the activation email. Admin only.
+
+    Activating an account that is already active changes nothing and returns
+    200 OK with the user's details.
+    """
+    user = await get_user_by_id(db=db, user_id=user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if not user.is_active:
+        user.is_active = True
+        await db.commit()
+
+    return UserDetailResponseSchema.model_validate(user)
+
+
+@router.post(
+    "/users/{user_id}/change-group",
+    summary="Change a user’s group",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin, their account is inactive, "
+            "or they tried to change their own group.",
+        },
+        404: {
+            "model": ErrorResponseSchema,
+            "description": "User is not found",
+        },
+    },
+)
+async def admin_change_user_group(
+    db: DbDep,
+    user_id: int,
+    data: ChangeGroupRequestSchema,
+    admin: AdminUserDep,
+) -> UserDetailResponseSchema:
+    """
+    Move a user to another group. Admin only.
+
+    Admins can change the group of any user except themselves, including
+    demoting other admins.
+
+    Requesting the group the user already has changes nothing and returns
+    200 OK with the user's details.
+    """
+    if admin.id == user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You cannot change your own group",
+        )
+    user = await get_user_by_id(db=db, user_id=user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if user.group.name != data.group_name:
+        user_group = await get_user_group_by_name(db=db, name=data.group_name)
+        if user_group is None:
+            raise HTTPException(status_code=500, detail="User group not found")
+
+        user.group = user_group
+        await db.commit()
+
+    return UserDetailResponseSchema.model_validate(user)
+
+
+@router.get(
+    "/users",
+    summary="List users",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or their account is inactive.",
+        },
+    },
+)
+async def admin_list_users(
+    db: DbDep,
+    admin: AdminUserDep,
+    email: str | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[UserDetailResponseSchema]:
+    """
+    List users in id order. Admin only.
+
+    Filter users by email with the email query parameter.
+
+    Use `limit` and `offset` to page through the results (at most 100 per request),
+    and `email` to look up a single user by their email address.
+    """
+    return [
+        UserDetailResponseSchema.model_validate(user)
+        for user in await get_users(db=db, offset=offset, limit=limit, email=email)
+    ]
