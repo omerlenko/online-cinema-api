@@ -4,17 +4,20 @@ from typing import Any
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from src.accounts.create_admin import create_admin
 from src.accounts.models import (
     ActivationToken,
     UserGroupEnum,
     RefreshToken,
     PasswordResetToken,
+    UserGroup,
 )
 from src.accounts.models import User
+from src.accounts.schemas import UserRegistrationRequestSchema
 from src.core.config import get_settings
 from src.core.security import (
     verify_hashed_password,
@@ -1220,3 +1223,41 @@ async def test_admin_change_group_with_no_permission(
         headers=auth_headers(caller),
     )
     assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_create_admin_command(db_session: AsyncSession):
+    password = "Password12345!"
+    data = UserRegistrationRequestSchema(email="admin@example.com", password=password)
+    created_user = await create_admin(db=db_session, data=data)
+
+    admin_user = await db_session.scalar(
+        select(User).options(joinedload(User.group)).where(User.id == created_user.id)
+    )
+    assert admin_user is not None
+    assert verify_hashed_password(password, admin_user.hashed_password)
+    assert admin_user.is_active
+    assert admin_user.group.name == UserGroupEnum.ADMIN
+
+
+async def test_create_admin_command_with_taken_email(
+    db_session: AsyncSession, create_user: Callable[..., Awaitable[User]]
+):
+    email = "admin@example.com"
+    password = "Password12345!"
+    await create_user(email=email, password=password)
+
+    data = UserRegistrationRequestSchema(email=email, password=password)
+
+    with pytest.raises(ValueError, match="A user with this email already exists"):
+        await create_admin(db=db_session, data=data)
+
+
+async def test_create_admin_command_with_no_admin_user_group(db_session: AsyncSession):
+    password = "Password12345!"
+    data = UserRegistrationRequestSchema(email="admin@example.com", password=password)
+
+    await db_session.execute(delete(UserGroup))
+    with pytest.raises(
+        ValueError, match="Admin group not found. Have the migrations been applied"
+    ):
+        await create_admin(db=db_session, data=data)

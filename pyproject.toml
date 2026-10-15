@@ -73,3 +73,4 @@ concurrency = ["greenlet", "thread"]
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
+exclude_also = ['if __name__ == "__main__":']
