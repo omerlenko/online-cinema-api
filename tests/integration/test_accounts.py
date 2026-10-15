@@ -1233,10 +1233,14 @@ async def test_create_admin_command(db_session: AsyncSession):
     admin_user = await db_session.scalar(
         select(User).options(joinedload(User.group)).where(User.id == created_user.id)
     )
-    assert admin_user is not None
-    assert verify_hashed_password(password, admin_user.hashed_password)
-    assert admin_user.is_active
-    assert admin_user.group.name == UserGroupEnum.ADMIN
+    assert admin_user is not None, "The user is not found"
+    assert verify_hashed_password(
+        password, admin_user.hashed_password
+    ), "The password is invalid"
+    assert admin_user.is_active, "The user is not active"
+    assert (
+        admin_user.group.name == UserGroupEnum.ADMIN
+    ), "The user is not in the 'admin' group"
 
 
 async def test_create_admin_command_with_taken_email(
@@ -1261,3 +1265,107 @@ async def test_create_admin_command_with_no_admin_user_group(db_session: AsyncSe
         ValueError, match="Admin group not found. Have the migrations been applied"
     ):
         await create_admin(db=db_session, data=data)
+
+
+async def test_list_users(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_1 = await create_user(
+        email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_2 = await create_user(
+        email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()]
+    assert response_ids == [
+        admin_user.id,
+        user_1.id,
+        user_2.id,
+    ], "Expected ids are not in the response."
+    assert response.json()[1] == {
+        "id": user_1.id,
+        "email": "user_1@example.com",
+        "group_name": "user",
+        "is_active": True,
+    }, "Response does not have the expected structure."
+
+
+async def test_list_users_filter_by_email(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    await create_user(
+        email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_2 = await create_user(
+        email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        params={"email": "user_2@example.com"},
+        headers=auth_headers(admin_user),
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()]
+    assert response_ids == [user_2.id], "Expected ids are not in the response."
+
+
+async def test_list_users_with_limit_and_offset(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_1 = await create_user(
+        email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_2 = await create_user(
+        email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    response_limit = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        params={"limit": 2, "offset": 0},
+        headers=auth_headers(admin_user),
+    )
+    assert response_limit.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response_limit.json()]
+    assert response_ids == [
+        admin_user.id,
+        user_1.id,
+    ], "Expected ids are not in the response."
+
+    response_offset = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        params={"limit": 2, "offset": 2},
+        headers=auth_headers(admin_user),
+    )
+    assert response_offset.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response_offset.json()]
+    assert response_ids == [user_2.id], "Expected id is not in the response."
+
+
+async def test_list_users_with_no_permission(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    regular_user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users",
+        headers=auth_headers(regular_user),
+    )
+    assert response.status_code == 403, "Expected status code 403 Forbidden"

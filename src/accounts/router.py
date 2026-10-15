@@ -24,6 +24,7 @@ from src.accounts.crud import (
     delete_password_reset_token_by_user_id,
     get_password_reset_token,
     get_user_by_id,
+    get_users,
 )
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
@@ -579,3 +580,38 @@ async def admin_change_user_group(
         await db.commit()
 
     return UserDetailResponseSchema.model_validate(user)
+
+
+@router.get(
+    "/users",
+    summary="List users",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or their account is inactive.",
+        },
+    },
+)
+async def admin_list_users(
+    db: DbDep,
+    admin: AdminUserDep,
+    email: str | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[UserDetailResponseSchema]:
+    """
+    List users in id order. Admin only.
+
+    Filter users by email with the email query parameter.
+
+    Use `limit` and `offset` to page through the results (at most 100 per request),
+    and `email` to look up a single user by their email address.
+    """
+    return [
+        UserDetailResponseSchema.model_validate(user)
+        for user in await get_users(db=db, offset=offset, limit=limit, email=email)
+    ]
