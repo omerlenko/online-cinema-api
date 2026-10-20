@@ -28,7 +28,14 @@ from src.core.security import (
 from src.database.base import Base
 from src.database.session import get_db
 from src.main import app
-from src.movies.models import Genre, Movie, Certification
+from src.movies.models import (
+    Genre,
+    Movie,
+    Certification,
+    UniqueNameBase,
+    Star,
+    Director,
+)
 from tests.helpers import FakeEmailSender
 
 settings = get_settings()
@@ -209,22 +216,25 @@ def toggle_docs_auth(monkeypatch: MonkeyPatch) -> Callable[[bool], None]:
 
 
 @pytest.fixture
-def create_genre(db_session: AsyncSession) -> Callable[..., Awaitable[Genre]]:
-    async def _create_genre(
-        name: str = "Drama",
-    ) -> Genre:
-        genre = Genre(
+def create_unique_name_object(
+    db_session: AsyncSession,
+) -> Callable[..., Awaitable[UniqueNameBase]]:
+    async def _create_unique_name_object(
+        name: str, model: type[UniqueNameBase]
+    ) -> UniqueNameBase:
+        obj = model(
             name=name,
         )
-        db_session.add(genre)
+        db_session.add(obj)
         await db_session.flush()
-        return genre
+        return obj
 
-    return _create_genre
+    return _create_unique_name_object
 
 
 @pytest.fixture
 def create_movie(db_session: AsyncSession) -> Callable[..., Awaitable[Movie]]:
+
     async def _create_movie(
         name: str = "Test Movie",
         year: int = 1999,
@@ -235,6 +245,8 @@ def create_movie(db_session: AsyncSession) -> Callable[..., Awaitable[Movie]]:
         price: Decimal = Decimal("99.99"),
         certification_id: int | None = None,
         genres: list[Genre] | None = None,
+        stars: list[Star] | None = None,
+        directors: list[Director] | None = None,
     ) -> Movie:
         if certification_id is None:
             certification_name = "PG-13"
@@ -260,6 +272,8 @@ def create_movie(db_session: AsyncSession) -> Callable[..., Awaitable[Movie]]:
             price=price,
             certification_id=certification_id,
             genres=genres or [],
+            stars=stars or [],
+            directors=directors or [],
         )
         db_session.add(movie)
         await db_session.flush()
