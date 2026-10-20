@@ -5,7 +5,7 @@ from src.core.schemas import ErrorResponseSchema
 from src.accounts.dependencies import ModeratorUserDep
 from src.database.session import DbDep
 from src.movies import crud
-from src.movies.models import Genre, movie_genres, Star
+from src.movies.models import Genre, movie_genres, Star, movie_stars
 from src.movies.schemas import (
     NameCreateSchema,
     NameReadSchema,
@@ -150,3 +150,141 @@ async def update_genre(
     await db.commit()
 
     return NameReadSchema.model_validate(genre)
+
+
+@router.get("/stars", summary="List stars", tags=["stars"])
+async def list_stars(db: DbDep) -> list[NameReadSchema]:
+    """
+    List stars in id order. Public.
+    """
+    stars = await crud.list_objects(db=db, model=Star)
+    return [NameReadSchema.model_validate(star) for star in stars]
+
+
+@router.post(
+    "/stars",
+    status_code=201,
+    summary="Create a star",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        409: {"model": ErrorResponseSchema, "description": "Star already exists."},
+    },
+    tags=["stars"],
+)
+async def create_star(
+    db: DbDep, star_data: NameCreateSchema, moderator: ModeratorUserDep
+) -> NameReadSchema:
+    """
+    Create a star. Moderator/Admin only.
+    """
+    star = await crud.get_object_by_name(db=db, model=Star, name=star_data.name)
+    if star is not None:
+        raise HTTPException(
+            status_code=409, detail="Star with this name already exists"
+        )
+
+    try:
+        star = await crud.create_object(db=db, model=Star, data=star_data)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="Star with this name already exists"
+        )
+    await db.commit()
+
+    return NameReadSchema.model_validate(star)
+
+
+@router.delete(
+    "/stars/{star_id}",
+    status_code=204,
+    summary="Delete a star",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Star not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Star cannot be deleted "
+            "while connected to existing movies.",
+        },
+    },
+    tags=["stars"],
+)
+async def delete_star(db: DbDep, star_id: int, moderator: ModeratorUserDep) -> None:
+    """
+    Delete a star. Moderator/Admin only.
+    """
+    star = await crud.get_object_by_id(db=db, model=Star, object_id=star_id)
+    if star is None:
+        raise HTTPException(status_code=404, detail="Star not found")
+
+    if await crud.object_has_movies(
+        db=db, link_column=movie_stars.c.star_id, object_id=star_id
+    ):
+        raise HTTPException(
+            status_code=409, detail="Star cannot be deleted while in use"
+        )
+    await db.delete(star)
+    await db.commit()
+
+
+@router.put(
+    "/stars/{star_id}",
+    summary="Update a star",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Star not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Star with this name already exists.",
+        },
+    },
+    tags=["stars"],
+)
+async def update_star(
+    db: DbDep, star_id: int, star_data: NameCreateSchema, moderator: ModeratorUserDep
+) -> NameReadSchema:
+    """
+    Update a star. Moderator/Admin only.
+    """
+    star = await crud.get_object_by_id(db=db, model=Star, object_id=star_id)
+    if star is None:
+        raise HTTPException(status_code=404, detail="Star not found")
+
+    existing_star = await crud.get_object_by_name(
+        db=db, model=Star, name=star_data.name
+    )
+    if existing_star is not None and existing_star.id != star_id:
+        raise HTTPException(
+            status_code=409, detail="Star with this name already exists"
+        )
+
+    try:
+        star = await crud.update_object(db=db, obj=star, data=star_data)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="Star with this name already exists"
+        )
+    await db.commit()
+
+    return NameReadSchema.model_validate(star)
