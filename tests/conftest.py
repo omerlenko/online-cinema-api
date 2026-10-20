@@ -1,5 +1,6 @@
 from datetime import datetime, timezone, timedelta
 from collections.abc import AsyncIterator, Awaitable, Coroutine
+from decimal import Decimal
 from typing import Any, Callable
 
 import pytest
@@ -27,6 +28,7 @@ from src.core.security import (
 from src.database.base import Base
 from src.database.session import get_db
 from src.main import app
+from src.movies.models import Genre, Movie, Certification
 from tests.helpers import FakeEmailSender
 
 settings = get_settings()
@@ -204,3 +206,63 @@ def toggle_docs_auth(monkeypatch: MonkeyPatch) -> Callable[[bool], None]:
         monkeypatch.setattr(settings, "DOCS_REQUIRE_AUTH", is_enabled)
 
     return _toggle_docs_auth
+
+
+@pytest.fixture
+def create_genre(db_session: AsyncSession) -> Callable[..., Awaitable[Genre]]:
+    async def _create_genre(
+        name: str = "Drama",
+    ) -> Genre:
+        genre = Genre(
+            name=name,
+        )
+        db_session.add(genre)
+        await db_session.flush()
+        return genre
+
+    return _create_genre
+
+
+@pytest.fixture
+def create_movie(db_session: AsyncSession) -> Callable[..., Awaitable[Movie]]:
+    async def _create_movie(
+        name: str = "Test Movie",
+        year: int = 1999,
+        time: int = 120,
+        imdb: float = 7.5,
+        votes: int = 100000,
+        description: str = "A Test Movie description.",
+        price: Decimal = Decimal("99.99"),
+        certification_id: int | None = None,
+        genres: list[Genre] | None = None,
+    ) -> Movie:
+        if certification_id is None:
+            certification_name = "PG-13"
+            certification = await db_session.scalar(
+                select(Certification).where(Certification.name == certification_name)
+            )
+
+            if certification is None:
+                certification = Certification(name=certification_name)
+                db_session.add(certification)
+                await db_session.flush()
+                await db_session.refresh(certification)
+
+            certification_id = certification.id
+
+        movie = Movie(
+            name=name,
+            year=year,
+            time=time,
+            imdb=imdb,
+            votes=votes,
+            description=description,
+            price=price,
+            certification_id=certification_id,
+            genres=genres or [],
+        )
+        db_session.add(movie)
+        await db_session.flush()
+        return movie
+
+    return _create_movie
