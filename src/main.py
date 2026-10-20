@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse
 
 from src.accounts.dependencies import validate_docs_credentials
 from src.accounts.router import router as accounts_router
+from src.movies.router import router as movies_router
 from src.core.config import get_settings
 from src.database.session import DbDep
 from src.core.schemas import HealthResponseSchema, ErrorResponseSchema
@@ -18,6 +19,7 @@ api_version_prefix = settings.API_VERSION_PREFIX
 app.include_router(
     accounts_router, prefix=f"{api_version_prefix}/accounts", tags=["accounts"]
 )
+app.include_router(movies_router, prefix=f"{api_version_prefix}/movies")
 
 logger = logging.getLogger(__name__)
 
