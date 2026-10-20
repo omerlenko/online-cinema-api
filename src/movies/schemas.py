@@ -7,11 +7,11 @@ Name = Annotated[
 ]
 
 
-class GenreCreateSchema(BaseModel):
+class NameCreateSchema(BaseModel):
     name: Name
 
 
-class GenreReadSchema(BaseModel):
+class NameReadSchema(BaseModel):
     id: int
     name: str
 

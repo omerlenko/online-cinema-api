@@ -1,47 +1,56 @@
-from sqlalchemy import select, func, exists
+from sqlalchemy import select, func, exists, Column
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import InstrumentedAttribute
 
-from src.movies.models import Genre, movie_genres
-from src.movies.schemas import GenreCreateSchema
-
-
-async def create_genre(db: AsyncSession, data: GenreCreateSchema) -> Genre:
-    genre = Genre(**data.model_dump())
-    db.add(genre)
-    await db.flush()
-    await db.refresh(genre)
-
-    return genre
+from src.movies.models import UniqueNameBase
+from src.movies.schemas import NameCreateSchema
 
 
-async def get_genre_by_id(db: AsyncSession, genre_id: int) -> Genre | None:
-    genre = await db.scalar(select(Genre).where(Genre.id == genre_id))
-    return genre
-
-
-async def genre_has_movies(db: AsyncSession, genre_id: int) -> bool:
-    result = await db.execute(
-        select(exists().where(movie_genres.c.genre_id == genre_id))
-    )
-    return result.scalar_one()
-
-
-async def get_genre_by_name(db: AsyncSession, name: str) -> Genre | None:
-    genre = await db.scalar(select(Genre).where(func.lower(Genre.name) == name.lower()))
-    return genre
-
-
-async def get_genres_list(db: AsyncSession) -> list[Genre]:
-    result = await db.scalars(select(Genre).order_by(Genre.id))
+async def list_objects[T: UniqueNameBase](db: AsyncSession, model: type[T]) -> list[T]:
+    result = await db.scalars(select(model).order_by(model.id))
     return list(result.all())
 
 
-async def update_genre(
-    db: AsyncSession, genre: Genre, data: GenreCreateSchema
-) -> Genre:
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(genre, field, value)
+async def create_object[T: UniqueNameBase](
+    db: AsyncSession, model: type[T], data: NameCreateSchema
+) -> T:
+    obj = model(**data.model_dump())
+    db.add(obj)
     await db.flush()
-    await db.refresh(genre)
+    await db.refresh(obj)
 
-    return genre
+    return obj
+
+
+async def get_object_by_id[T: UniqueNameBase](
+    db: AsyncSession, model: type[T], object_id: int
+) -> T | None:
+    obj = await db.scalar(select(model).where(model.id == object_id))
+    return obj
+
+
+async def get_object_by_name[T: UniqueNameBase](
+    db: AsyncSession, model: type[T], name: str
+) -> T | None:
+    obj = await db.scalar(select(model).where(func.lower(model.name) == name.lower()))
+    return obj
+
+
+async def object_has_movies(
+    db: AsyncSession,
+    link_column: Column[int] | InstrumentedAttribute[int],
+    object_id: int,
+) -> bool:
+    result = await db.execute(select(exists().where(link_column == object_id)))
+    return result.scalar_one()
+
+
+async def update_object[T: UniqueNameBase](
+    db: AsyncSession, obj: T, data: NameCreateSchema
+) -> T:
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(obj, field, value)
+    await db.flush()
+    await db.refresh(obj)
+
+    return obj
