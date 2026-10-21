@@ -5,7 +5,16 @@ from src.core.schemas import ErrorResponseSchema
 from src.accounts.dependencies import ModeratorUserDep
 from src.database.session import DbDep
 from src.movies import crud
-from src.movies.models import Genre, movie_genres, Star, movie_stars
+from src.movies.models import (
+    Genre,
+    movie_genres,
+    Star,
+    movie_stars,
+    Director,
+    movie_directors,
+    Certification,
+    Movie,
+)
 from src.movies.schemas import (
     NameCreateSchema,
     NameReadSchema,
@@ -288,3 +297,309 @@ async def update_star(
     await db.commit()
 
     return NameReadSchema.model_validate(star)
+
+
+@router.get("/directors", summary="List directors", tags=["directors"])
+async def list_directors(db: DbDep) -> list[NameReadSchema]:
+    """
+    List directors in id order. Public.
+    """
+    directors = await crud.list_objects(db=db, model=Director)
+    return [NameReadSchema.model_validate(director) for director in directors]
+
+
+@router.post(
+    "/directors",
+    status_code=201,
+    summary="Create a director",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        409: {"model": ErrorResponseSchema, "description": "Director already exists."},
+    },
+    tags=["directors"],
+)
+async def create_director(
+    db: DbDep, director_data: NameCreateSchema, moderator: ModeratorUserDep
+) -> NameReadSchema:
+    """
+    Create a director. Moderator/Admin only.
+    """
+    director = await crud.get_object_by_name(
+        db=db, model=Director, name=director_data.name
+    )
+    if director is not None:
+        raise HTTPException(
+            status_code=409, detail="Director with this name already exists"
+        )
+
+    try:
+        director = await crud.create_object(db=db, model=Director, data=director_data)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="Director with this name already exists"
+        )
+    await db.commit()
+
+    return NameReadSchema.model_validate(director)
+
+
+@router.delete(
+    "/directors/{director_id}",
+    status_code=204,
+    summary="Delete a director",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Director not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Director cannot be deleted "
+            "while connected to existing movies.",
+        },
+    },
+    tags=["directors"],
+)
+async def delete_director(
+    db: DbDep, director_id: int, moderator: ModeratorUserDep
+) -> None:
+    """
+    Delete a director. Moderator/Admin only.
+    """
+    director = await crud.get_object_by_id(db=db, model=Director, object_id=director_id)
+    if director is None:
+        raise HTTPException(status_code=404, detail="Director not found")
+
+    if await crud.object_has_movies(
+        db=db, link_column=movie_directors.c.director_id, object_id=director_id
+    ):
+        raise HTTPException(
+            status_code=409, detail="Director cannot be deleted while in use"
+        )
+    await db.delete(director)
+    await db.commit()
+
+
+@router.put(
+    "/directors/{director_id}",
+    summary="Update a director",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Director not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Director with this name already exists.",
+        },
+    },
+    tags=["directors"],
+)
+async def update_director(
+    db: DbDep,
+    director_id: int,
+    director_data: NameCreateSchema,
+    moderator: ModeratorUserDep,
+) -> NameReadSchema:
+    """
+    Update a director. Moderator/Admin only.
+    """
+    director = await crud.get_object_by_id(db=db, model=Director, object_id=director_id)
+    if director is None:
+        raise HTTPException(status_code=404, detail="Director not found")
+
+    existing_director = await crud.get_object_by_name(
+        db=db, model=Director, name=director_data.name
+    )
+    if existing_director is not None and existing_director.id != director_id:
+        raise HTTPException(
+            status_code=409, detail="Director with this name already exists"
+        )
+
+    try:
+        director = await crud.update_object(db=db, obj=director, data=director_data)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="Director with this name already exists"
+        )
+    await db.commit()
+
+    return NameReadSchema.model_validate(director)
+
+
+@router.get("/certifications", summary="List certifications", tags=["certifications"])
+async def list_certifications(db: DbDep) -> list[NameReadSchema]:
+    """
+    List certifications in id order. Public.
+    """
+    certifications = await crud.list_objects(db=db, model=Certification)
+    return [
+        NameReadSchema.model_validate(certification) for certification in certifications
+    ]
+
+
+@router.post(
+    "/certifications",
+    status_code=201,
+    summary="Create a certification",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Certification already exists.",
+        },
+    },
+    tags=["certifications"],
+)
+async def create_certification(
+    db: DbDep, certification_data: NameCreateSchema, moderator: ModeratorUserDep
+) -> NameReadSchema:
+    """
+    Create a certification. Moderator/Admin only.
+    """
+    certification = await crud.get_object_by_name(
+        db=db, model=Certification, name=certification_data.name
+    )
+    if certification is not None:
+        raise HTTPException(
+            status_code=409, detail="Certification with this name already exists"
+        )
+
+    try:
+        certification = await crud.create_object(
+            db=db, model=Certification, data=certification_data
+        )
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="Certification with this name already exists"
+        )
+    await db.commit()
+
+    return NameReadSchema.model_validate(certification)
+
+
+@router.delete(
+    "/certifications/{certification_id}",
+    status_code=204,
+    summary="Delete a certification",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Certification not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Certification cannot be deleted "
+            "while connected to existing movies.",
+        },
+    },
+    tags=["certifications"],
+)
+async def delete_certification(
+    db: DbDep, certification_id: int, moderator: ModeratorUserDep
+) -> None:
+    """
+    Delete a certification. Moderator/Admin only.
+    """
+    certification = await crud.get_object_by_id(
+        db=db, model=Certification, object_id=certification_id
+    )
+    if certification is None:
+        raise HTTPException(status_code=404, detail="Certification not found")
+
+    if await crud.object_has_movies(
+        db=db, link_column=Movie.certification_id, object_id=certification_id
+    ):
+        raise HTTPException(
+            status_code=409, detail="Certification cannot be deleted while in use"
+        )
+    await db.delete(certification)
+    await db.commit()
+
+
+@router.put(
+    "/certifications/{certification_id}",
+    summary="Update a certification",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Certification not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Certification with this name already exists.",
+        },
+    },
+    tags=["certifications"],
+)
+async def update_certification(
+    db: DbDep,
+    certification_id: int,
+    certification_data: NameCreateSchema,
+    moderator: ModeratorUserDep,
+) -> NameReadSchema:
+    """
+    Update a certification. Moderator/Admin only.
+    """
+    certification = await crud.get_object_by_id(
+        db=db, model=Certification, object_id=certification_id
+    )
+    if certification is None:
+        raise HTTPException(status_code=404, detail="Certification not found")
+
+    existing_certification = await crud.get_object_by_name(
+        db=db, model=Certification, name=certification_data.name
+    )
+    if (
+        existing_certification is not None
+        and existing_certification.id != certification_id
+    ):
+        raise HTTPException(
+            status_code=409, detail="Certification with this name already exists"
+        )
+
+    try:
+        certification = await crud.update_object(
+            db=db, obj=certification, data=certification_data
+        )
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409, detail="Certification with this name already exists"
+        )
+    await db.commit()
+
+    return NameReadSchema.model_validate(certification)
