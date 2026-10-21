@@ -8,7 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.accounts.models import UserGroupEnum
 from src.accounts.models import User
 from src.core.config import get_settings
-from src.movies.models import Genre, Movie, UniqueNameBase, Star
+from src.movies.models import (
+    Genre,
+    Movie,
+    UniqueNameBase,
+    Star,
+    Director,
+    Certification,
+)
 from tests.helpers import auth_headers
 
 settings = get_settings()
@@ -18,6 +25,8 @@ MOVIES_URL = f"{settings.API_VERSION_PREFIX}/movies"
 FULL_CRUD_TABLES = [
     pytest.param("genres", Genre, id="genres"),
     pytest.param("stars", Star, id="stars"),
+    pytest.param("directors", Director, id="directors"),
+    pytest.param("certifications", Certification, id="certifications"),
 ]
 
 
@@ -208,6 +217,10 @@ async def test_delete_with_unknown_object(
     [
         pytest.param("genres", Genre, "genres", id="genres"),
         pytest.param("stars", Star, "stars", id="stars"),
+        pytest.param("directors", Director, "directors", id="directors"),
+        pytest.param(
+            "certifications", Certification, "certification_id", id="certifications"
+        ),
     ],
 )
 async def test_delete_while_in_use(
@@ -222,7 +235,9 @@ async def test_delete_while_in_use(
 ):
     moderator = await create_user(is_active=True, user_group=UserGroupEnum.MODERATOR)
     obj = await create_unique_name_object(name="Drama", model=model)
-    await create_movie(**{movie_field: [obj]})
+    await create_movie(
+        **{movie_field: obj.id if movie_field == "certification_id" else [obj]}
+    )
 
     response = await client.delete(
         f"{MOVIES_URL}/{url_segment}/{obj.id}",
