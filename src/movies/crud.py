@@ -1,9 +1,16 @@
 from sqlalchemy import select, func, exists, Column
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import InstrumentedAttribute
+from sqlalchemy.orm import InstrumentedAttribute, selectinload, joinedload
 
-from src.movies.models import UniqueNameBase
-from src.movies.schemas import NameCreateSchema
+from src.movies.models import (
+    UniqueNameBase,
+    Movie,
+    Certification,
+    Genre,
+    Star,
+    Director,
+)
+from src.movies.schemas import NameCreateSchema, MovieCreateSchema, MovieUpdateSchema
 
 
 async def list_objects[T: UniqueNameBase](db: AsyncSession, model: type[T]) -> list[T]:
@@ -54,3 +61,88 @@ async def update_object[T: UniqueNameBase](
     await db.refresh(obj)
 
     return obj
+
+
+async def list_movies(db: AsyncSession) -> list[Movie]:
+    result = await db.scalars(
+        select(Movie)
+        .options(
+            joinedload(Movie.certification),
+            selectinload(Movie.genres),
+            selectinload(Movie.stars),
+            selectinload(Movie.directors),
+        )
+        .order_by(Movie.id)
+    )
+    return list(result.all())
+
+
+async def get_movie_by_name_year_time(
+    db: AsyncSession, name: str, year: int, time: int
+) -> Movie | None:
+    movie = await db.scalar(
+        select(Movie).where(
+            func.lower(Movie.name) == name.lower(),
+            Movie.year == year,
+            Movie.time == time,
+        )
+    )
+    return movie
+
+
+async def create_movie(
+    db: AsyncSession,
+    data: MovieCreateSchema,
+    certification: Certification,
+    genres: list[Genre],
+    stars: list[Star],
+    directors: list[Director],
+) -> Movie:
+    movie = Movie(
+        **data.model_dump(
+            exclude={"certification_id", "genre_ids", "star_ids", "director_ids"}
+        ),
+        certification=certification,
+        genres=genres,
+        stars=stars,
+        directors=directors,
+    )
+    db.add(movie)
+    await db.flush()
+
+    return movie
+
+
+async def get_movie_by_id(db: AsyncSession, movie_id: int) -> Movie | None:
+    movie = await db.scalar(
+        select(Movie)
+        .where(Movie.id == movie_id)
+        .options(
+            joinedload(Movie.certification),
+            selectinload(Movie.genres),
+            selectinload(Movie.stars),
+            selectinload(Movie.directors),
+        )
+    )
+    return movie
+
+
+async def get_objects_by_ids[T: UniqueNameBase](
+    db: AsyncSession, model: type[T], object_ids: list[int]
+) -> list[T]:
+    result = await db.scalars(select(model).where(model.id.in_(object_ids)))
+    return list(result.all())
+
+
+async def update_movie(
+    db: AsyncSession, movie: Movie, data: MovieUpdateSchema
+) -> Movie:
+    for field, value in data.model_dump(
+        exclude_unset=True,
+        exclude_none=True,
+        exclude={"certification_id", "genre_ids", "star_ids", "director_ids"},
+    ).items():
+        setattr(movie, field, value)
+    await db.flush()
+
+    return movie

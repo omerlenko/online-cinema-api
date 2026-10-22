@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.schemas import ErrorResponseSchema
 from src.accounts.dependencies import ModeratorUserDep
@@ -14,22 +15,39 @@ from src.movies.models import (
     movie_directors,
     Certification,
     Movie,
+    UniqueNameBase,
 )
 from src.movies.schemas import (
     NameCreateSchema,
-    NameReadSchema,
+    NameDetailSchema,
+    MovieDetailSchema,
+    MovieCreateSchema,
+    MovieUpdateSchema,
 )
 
 router = APIRouter()
 
 
+async def get_all_objects_or_400[T: UniqueNameBase](
+    db: AsyncSession, model: type[T], ids: list[int], label: str
+) -> list[T]:
+    objects = await crud.get_objects_by_ids(db=db, model=model, object_ids=ids)
+    missing_ids = set(ids) - {obj.id for obj in objects}
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} with these ids not found: {sorted(missing_ids)}",
+        )
+    return objects
+
+
 @router.get("/genres", summary="List genres", tags=["genres"])
-async def list_genres(db: DbDep) -> list[NameReadSchema]:
+async def list_genres(db: DbDep) -> list[NameDetailSchema]:
     """
     List genres in id order. Public.
     """
     genres = await crud.list_objects(db=db, model=Genre)
-    return [NameReadSchema.model_validate(genre) for genre in genres]
+    return [NameDetailSchema.model_validate(genre) for genre in genres]
 
 
 @router.post(
@@ -51,7 +69,7 @@ async def list_genres(db: DbDep) -> list[NameReadSchema]:
 )
 async def create_genre(
     db: DbDep, genre_data: NameCreateSchema, moderator: ModeratorUserDep
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Create a genre. Moderator/Admin only.
     """
@@ -69,7 +87,7 @@ async def create_genre(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(genre)
+    return NameDetailSchema.model_validate(genre)
 
 
 @router.delete(
@@ -134,7 +152,7 @@ async def delete_genre(db: DbDep, genre_id: int, moderator: ModeratorUserDep) ->
 )
 async def update_genre(
     db: DbDep, genre_id: int, genre_data: NameCreateSchema, moderator: ModeratorUserDep
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Update a genre. Moderator/Admin only.
     """
@@ -158,16 +176,16 @@ async def update_genre(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(genre)
+    return NameDetailSchema.model_validate(genre)
 
 
 @router.get("/stars", summary="List stars", tags=["stars"])
-async def list_stars(db: DbDep) -> list[NameReadSchema]:
+async def list_stars(db: DbDep) -> list[NameDetailSchema]:
     """
     List stars in id order. Public.
     """
     stars = await crud.list_objects(db=db, model=Star)
-    return [NameReadSchema.model_validate(star) for star in stars]
+    return [NameDetailSchema.model_validate(star) for star in stars]
 
 
 @router.post(
@@ -189,7 +207,7 @@ async def list_stars(db: DbDep) -> list[NameReadSchema]:
 )
 async def create_star(
     db: DbDep, star_data: NameCreateSchema, moderator: ModeratorUserDep
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Create a star. Moderator/Admin only.
     """
@@ -207,7 +225,7 @@ async def create_star(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(star)
+    return NameDetailSchema.model_validate(star)
 
 
 @router.delete(
@@ -272,7 +290,7 @@ async def delete_star(db: DbDep, star_id: int, moderator: ModeratorUserDep) -> N
 )
 async def update_star(
     db: DbDep, star_id: int, star_data: NameCreateSchema, moderator: ModeratorUserDep
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Update a star. Moderator/Admin only.
     """
@@ -296,16 +314,16 @@ async def update_star(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(star)
+    return NameDetailSchema.model_validate(star)
 
 
 @router.get("/directors", summary="List directors", tags=["directors"])
-async def list_directors(db: DbDep) -> list[NameReadSchema]:
+async def list_directors(db: DbDep) -> list[NameDetailSchema]:
     """
     List directors in id order. Public.
     """
     directors = await crud.list_objects(db=db, model=Director)
-    return [NameReadSchema.model_validate(director) for director in directors]
+    return [NameDetailSchema.model_validate(director) for director in directors]
 
 
 @router.post(
@@ -327,7 +345,7 @@ async def list_directors(db: DbDep) -> list[NameReadSchema]:
 )
 async def create_director(
     db: DbDep, director_data: NameCreateSchema, moderator: ModeratorUserDep
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Create a director. Moderator/Admin only.
     """
@@ -347,7 +365,7 @@ async def create_director(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(director)
+    return NameDetailSchema.model_validate(director)
 
 
 @router.delete(
@@ -417,7 +435,7 @@ async def update_director(
     director_id: int,
     director_data: NameCreateSchema,
     moderator: ModeratorUserDep,
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Update a director. Moderator/Admin only.
     """
@@ -441,17 +459,18 @@ async def update_director(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(director)
+    return NameDetailSchema.model_validate(director)
 
 
 @router.get("/certifications", summary="List certifications", tags=["certifications"])
-async def list_certifications(db: DbDep) -> list[NameReadSchema]:
+async def list_certifications(db: DbDep) -> list[NameDetailSchema]:
     """
     List certifications in id order. Public.
     """
     certifications = await crud.list_objects(db=db, model=Certification)
     return [
-        NameReadSchema.model_validate(certification) for certification in certifications
+        NameDetailSchema.model_validate(certification)
+        for certification in certifications
     ]
 
 
@@ -477,7 +496,7 @@ async def list_certifications(db: DbDep) -> list[NameReadSchema]:
 )
 async def create_certification(
     db: DbDep, certification_data: NameCreateSchema, moderator: ModeratorUserDep
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Create a certification. Moderator/Admin only.
     """
@@ -499,7 +518,7 @@ async def create_certification(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(certification)
+    return NameDetailSchema.model_validate(certification)
 
 
 @router.delete(
@@ -571,7 +590,7 @@ async def update_certification(
     certification_id: int,
     certification_data: NameCreateSchema,
     moderator: ModeratorUserDep,
-) -> NameReadSchema:
+) -> NameDetailSchema:
     """
     Update a certification. Moderator/Admin only.
     """
@@ -602,4 +621,226 @@ async def update_certification(
         )
     await db.commit()
 
-    return NameReadSchema.model_validate(certification)
+    return NameDetailSchema.model_validate(certification)
+
+
+@router.get("", summary="List movies", tags=["movies"])
+async def list_movies(db: DbDep) -> list[MovieDetailSchema]:
+    """
+    List movies in id order. Public.
+    """
+    movies = await crud.list_movies(db=db)
+    return [MovieDetailSchema.model_validate(movie) for movie in movies]
+
+
+@router.get(
+    "/{movie_id}",
+    summary="Get movie details",
+    responses={
+        404: {
+            "model": ErrorResponseSchema,
+            "description": "Movie not found.",
+        },
+    },
+    tags=["movies"],
+)
+async def get_movie_details(db: DbDep, movie_id: int) -> MovieDetailSchema:
+    """
+    Get movie details. Public.
+    """
+    movie = await crud.get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    return MovieDetailSchema.model_validate(movie)
+
+
+@router.post(
+    "",
+    status_code=201,
+    summary="Create a movie",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "One or more of genres, stars, directors "
+            "or a certification is not found.",
+        },
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Movie with this name, year and duration already exists.",
+        },
+    },
+    tags=["movies"],
+)
+async def create_movie(
+    db: DbDep, movie_data: MovieCreateSchema, moderator: ModeratorUserDep
+) -> MovieDetailSchema:
+    """
+    Create a movie. Moderator/Admin only.
+    """
+    movie = await crud.get_movie_by_name_year_time(
+        db=db, name=movie_data.name, year=movie_data.year, time=movie_data.time
+    )
+    if movie is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie with this name, year and duration already exists.",
+        )
+
+    certification = await crud.get_object_by_id(
+        db=db, model=Certification, object_id=movie_data.certification_id
+    )
+    if certification is None:
+        raise HTTPException(status_code=400, detail="Certification not found")
+
+    genres = await get_all_objects_or_400(
+        db=db, model=Genre, ids=movie_data.genre_ids, label="Genres"
+    )
+    stars = await get_all_objects_or_400(
+        db=db, model=Star, ids=movie_data.star_ids, label="Stars"
+    )
+    directors = await get_all_objects_or_400(
+        db=db, model=Director, ids=movie_data.director_ids, label="Directors"
+    )
+
+    try:
+        movie = await crud.create_movie(
+            db=db,
+            data=movie_data,
+            certification=certification,
+            genres=genres,
+            stars=stars,
+            directors=directors,
+        )
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie with this name, year and duration already exists.",
+        )
+    await db.commit()
+
+    return MovieDetailSchema.model_validate(movie)
+
+
+@router.delete(
+    "/{movie_id}",
+    status_code=204,
+    summary="Delete a movie",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Movie not found."},
+    },
+    tags=["movies"],
+)
+async def delete_movie(db: DbDep, movie_id: int, moderator: ModeratorUserDep) -> None:
+    """
+    Delete a movie. Moderator/Admin only.
+    """
+    movie = await crud.get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    await db.delete(movie)
+    await db.commit()
+
+
+@router.patch(
+    "/{movie_id}",
+    summary="Update a movie",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "One or more of genres, stars, directors "
+            "or a certification is not found.",
+        },
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin or moderator.",
+        },
+        404: {"model": ErrorResponseSchema, "description": "Movie not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Movie with this name, year and duration already exists.",
+        },
+    },
+    tags=["movies"],
+)
+async def update_movie(
+    db: DbDep,
+    movie_id: int,
+    movie_data: MovieUpdateSchema,
+    moderator: ModeratorUserDep,
+) -> MovieDetailSchema:
+    """
+    Update a movie. Moderator/Admin only.
+    """
+    movie = await crud.get_movie_by_id(db=db, movie_id=movie_id)
+    if movie is None:
+        raise HTTPException(status_code=404, detail="Movie not found")
+
+    existing_movie = await crud.get_movie_by_name_year_time(
+        db=db,
+        name=movie_data.name or movie.name,
+        year=movie_data.year or movie.year,
+        time=movie_data.time or movie.time,
+    )
+    if existing_movie is not None and existing_movie.id != movie_id:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie with this name, year and duration already exists.",
+        )
+
+    if movie_data.certification_id is not None:
+        certification = await crud.get_object_by_id(
+            db=db, model=Certification, object_id=movie_data.certification_id
+        )
+        if certification is None:
+            raise HTTPException(status_code=400, detail="Certification not found")
+        movie.certification = certification
+
+    if movie_data.genre_ids is not None:
+        genres = await get_all_objects_or_400(
+            db=db, model=Genre, ids=movie_data.genre_ids, label="Genres"
+        )
+        movie.genres = genres
+
+    if movie_data.star_ids is not None:
+        stars = await get_all_objects_or_400(
+            db=db, model=Star, ids=movie_data.star_ids, label="Stars"
+        )
+        movie.stars = stars
+
+    if movie_data.director_ids is not None:
+        directors = await get_all_objects_or_400(
+            db=db, model=Director, ids=movie_data.director_ids, label="Directors"
+        )
+        movie.directors = directors
+
+    try:
+        movie = await crud.update_movie(db=db, movie=movie, data=movie_data)
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie with this name, year and duration already exists.",
+        )
+    await db.commit()
+
+    return MovieDetailSchema.model_validate(movie)
