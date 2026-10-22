@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from src.accounts.models import User
 from src.core.security import create_access_token
@@ -44,3 +45,30 @@ class FakeTaskSession:
 
     async def commit(self) -> None:
         self.committed = True
+
+
+def create_movie_payload(
+    certification_id: int,
+    genre_ids: list[int] | None = None,
+    star_ids: list[int] | None = None,
+    director_ids: list[int] | None = None,
+    **kwargs,
+) -> dict[str, Any]:
+    movie_payload = {
+        "name": "Test Movie",
+        "year": 2026,
+        "time": 120,
+        "imdb": 8.5,
+        "votes": 100000,
+        "meta_score": 81,
+        "gross": 210000000,
+        "description": "Test Movie description",
+        "price": 9.99,
+        "certification_id": certification_id,
+        "genre_ids": genre_ids or [],
+        "star_ids": star_ids or [],
+        "director_ids": director_ids or [],
+    }
+    if kwargs:
+        movie_payload.update(**kwargs)
+    return movie_payload
