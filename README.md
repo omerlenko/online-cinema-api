@@ -23,6 +23,13 @@ async SQLAlchemy.
 - Admin endpoints to list users, activate accounts manually and change a user's group
 - Command to create the first admin account
 
+### Movies
+
+- Public movie list and movie details, with certification, genres, stars and directors
+- Moderator endpoints to create, update and delete movies
+- Moderator endpoints to manage genres, stars, directors and certifications
+- Genres, stars, directors and certifications used by a movie cannot be deleted
+
 ## Tech Stack
 
 - **Python 3.13**, **FastAPI**, **Pydantic v2**
@@ -70,6 +77,7 @@ docker compose logs -f celery-worker celery-beat   # follow background task logs
 3. `POST /api/v1/accounts/login` to receive an access token and a refresh token.
 4. In the interactive docs, click **Authorize** and paste the access token to call protected endpoints such as
    `GET /api/v1/accounts/me`.
+5. With a moderator or admin account, create a certification and a genre, then `POST /api/v1/movies` with their ids.
 
 ## Authentication
 
@@ -110,6 +118,22 @@ docker compose exec app python -m src.accounts.create_admin admin@example.com
 
 The command asks for the password twice, applies the same rules as registration, and creates an account that is already
 active. When running the API locally, use `poetry run python -m src.accounts.create_admin admin@example.com` instead.
+
+## Movie Management
+
+| Resource                                 | Anyone                                                | Moderator or admin                                |
+|------------------------------------------|-------------------------------------------------------|---------------------------------------------------|
+| Movies                                   | `GET /api/v1/movies`, `GET /api/v1/movies/{movie_id}` | `POST /api/v1/movies`, `PATCH` and `DELETE` by id |
+| Genres, stars, directors, certifications | `GET /api/v1/movies/genres` (and `/stars`, …)         | `POST`, and `PUT` and `DELETE` by id              |
+
+- A new movie refers to its certification, genres, stars and directors by id. Unknown ids are rejected with 400, and
+  the message lists every missing id.
+- A movie is identified by its name, release year and duration: a second movie with the same three values is rejected
+  with 409.
+- `PATCH` changes only the fields that are sent. A list such as `genre_ids` replaces the current links, and an empty
+  list removes them all.
+- Genres, stars, directors and certifications are stored as typed; a name that differs only in letter case from an
+  existing one is rejected.
 
 ## Background Tasks
 
@@ -175,6 +199,12 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
   than passed as an argument, so it does not end up in shell history.
 - **The user list uses `limit`/`offset` paging**, at most 100 users per request. It will move to the shared
   pagination format when the movie catalog adds one.
+- **Catalog data in use cannot be deleted.** Deleting a genre, star, director or certification that a movie still uses
+  is refused with 409. Deleting a movie removes its links but keeps the genres, stars and directors.
+- **Duplicate names are caught only by letter case.** "Drama" and "drama" are the same genre, but different spellings
+  of one thing, such as "Sci-Fi" and "Science Fiction", are not detected. Moderators keep these lists clean.
+- **In `PATCH`, `null` means "no change"**, so the optional `meta_score` and `gross` cannot be cleared back to empty.
+- **The movie list is not paginated yet.** Pagination, filtering, sorting and search come with the catalog.
 
 ## Configuration
 
@@ -273,6 +303,7 @@ src/
 ├── accounts/       # registration, authentication, user groups, admin command, token cleanup task
 ├── core/           # settings, security (hashing, JWT), email sending, shared schemas
 ├── database/       # engine, sessions, declarative base
+├── movies/         # movies, genres, stars, directors, certifications: models, schemas, endpoints
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
 migrations/     # Alembic database migrations
