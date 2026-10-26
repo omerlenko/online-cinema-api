@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from typing import cast, Any
 
-from sqlalchemy import select, delete, CursorResult
+from sqlalchemy import select, delete, CursorResult, func, Select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -12,9 +12,14 @@ from src.accounts.models import (
     RefreshToken,
     PasswordResetToken,
 )
-from src.accounts.schemas import UserRegistrationRequestSchema
+from src.accounts.schemas import (
+    UserRegistrationRequestSchema,
+    UserQueryParameters,
+    UserSortField,
+)
 from src.accounts.models import User
 from src.core.config import get_settings
+from src.core.schemas import SortOrderEnum
 from src.core.security import (
     hash_password,
     generate_token,
@@ -37,20 +42,56 @@ async def get_user_by_id(db: AsyncSession, user_id: int) -> User | None:
     return user
 
 
-async def get_users(
-    db: AsyncSession, offset: int = 0, limit: int = 20, email: str | None = None
+USER_SORT_COLUMNS = {
+    UserSortField.ID: User.id,
+    UserSortField.EMAIL: User.email,
+}
+
+
+def apply_user_filters(
+    stmt: Select[tuple[User]], params: UserQueryParameters
+) -> Select[tuple[User]]:
+    if params.is_active is not None:
+        stmt = stmt.where(User.is_active == params.is_active)
+    if params.group is not None:
+        stmt = stmt.where(User.group.has(UserGroup.name == params.group))
+
+    if params.search:
+        pattern = f"%{params.search}%"
+        stmt = stmt.where(User.email.ilike(pattern))
+    return stmt
+
+
+def apply_user_sorting(
+    stmt: Select[tuple[User]], params: UserQueryParameters
+) -> Select[tuple[User]]:
+    if params.order == SortOrderEnum.DESC:
+        stmt = stmt.order_by(USER_SORT_COLUMNS[params.sort_by].desc())
+    else:
+        stmt = stmt.order_by(USER_SORT_COLUMNS[params.sort_by])
+    return stmt.order_by(User.id)
+
+
+async def list_users(
+    db: AsyncSession,
+    params: UserQueryParameters,
+    offset: int = 0,
+    limit: int = 20,
 ) -> list[User]:
-    stmt = (
-        select(User)
-        .options(joinedload(User.group))
-        .order_by(User.id)
-        .offset(offset)
-        .limit(limit)
-    )
-    if email is not None:
-        stmt = stmt.where(User.email == email.strip().lower())
+    stmt = apply_user_filters(select(User), params)
+    stmt = apply_user_sorting(stmt, params)
+
+    stmt = stmt.options(joinedload(User.group)).offset(offset).limit(limit)
     result = await db.scalars(stmt)
     return list(result.all())
+
+
+async def count_users(db: AsyncSession, params: UserQueryParameters) -> int:
+    stmt = apply_user_filters(select(User), params)
+    total_count = (
+        await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    )
+    return total_count
 
 
 async def get_user_group_by_name(

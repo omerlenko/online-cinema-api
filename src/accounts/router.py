@@ -1,31 +1,15 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
 from sqlalchemy.exc import IntegrityError
 
 from src.accounts.dependencies import CurrentUserDep, AdminUserDep
-from src.core.schemas import ErrorResponseSchema
+from src.core.pagination import PaginationDep
+from src.core.schemas import ErrorResponseSchema, Page
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
-from src.accounts.crud import (
-    get_user_by_email,
-    get_user_group_by_name,
-    create_user,
-    create_activation_token,
-    get_activation_token,
-    get_activation_token_by_user_id,
-    delete_activation_token,
-    create_refresh_token_object,
-    get_refresh_token_object_by_token,
-    delete_refresh_token_object,
-    delete_refresh_token_objects_by_user_id,
-    create_password_reset_token,
-    delete_password_reset_token_by_user_id,
-    get_password_reset_token,
-    get_user_by_id,
-    get_users,
-)
+from src.accounts import crud
 from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
     UserRegistrationResponseSchema,
@@ -41,6 +25,7 @@ from src.accounts.schemas import (
     ForgotPasswordRequestSchema,
     ResetPasswordRequestSchema,
     ChangeGroupRequestSchema,
+    UserQueryParameters,
 )
 from src.core.security import (
     verify_hashed_password,
@@ -85,18 +70,20 @@ async def register_user(
     The link is valid for 24 hours. If it expires, request a new one via
     `/resend-activation`.
     """
-    existing_user = await get_user_by_email(db=db, email=data.email)
+    existing_user = await crud.get_user_by_email(db=db, email=data.email)
     if existing_user is not None:
         raise HTTPException(
             status_code=409, detail="A user with this email already exists"
         )
-    user_group = await get_user_group_by_name(db=db, name=UserGroupEnum.USER)
+    user_group = await crud.get_user_group_by_name(db=db, name=UserGroupEnum.USER)
     if user_group is None:
         raise HTTPException(status_code=500, detail="Default user group not found")
 
     try:
-        new_user = await create_user(db=db, data=data, user_group=user_group)
-        activation_token = await create_activation_token(db=db, user_id=new_user.id)
+        new_user = await crud.create_user(db=db, data=data, user_group=user_group)
+        activation_token = await crud.create_activation_token(
+            db=db, user_id=new_user.id
+        )
         await db.commit()
     except IntegrityError:
         raise HTTPException(
@@ -138,7 +125,7 @@ async def activate_user(
     An expired link gets 400, the user can use '/resend-activation'
     to get a new activation link.
     """
-    activation_token = await get_activation_token(db=db, token=token)
+    activation_token = await crud.get_activation_token(db=db, token=token)
     if activation_token is None:
         raise HTTPException(
             status_code=400, detail="Invalid or expired activation token"
@@ -176,20 +163,24 @@ async def resend_activation_token(
 
     Active accounts receive no email.
     """
-    user = await get_user_by_email(db=db, email=email_data.email)
+    user = await crud.get_user_by_email(db=db, email=email_data.email)
     if user is None or user.is_active:
         return MessageResponseSchema(
             message="If the email belongs to an inactive account, "
             "a new activation link has been sent"
         )
 
-    activation_token = await get_activation_token_by_user_id(db=db, user_id=user.id)
+    activation_token = await crud.get_activation_token_by_user_id(
+        db=db, user_id=user.id
+    )
     if activation_token is None:
-        activation_token = await create_activation_token(db=db, user_id=user.id)
+        activation_token = await crud.create_activation_token(db=db, user_id=user.id)
     else:
         if activation_token.expires_at <= datetime.now(timezone.utc):
-            await delete_activation_token(db=db, activation_token=activation_token)
-            activation_token = await create_activation_token(db=db, user_id=user.id)
+            await crud.delete_activation_token(db=db, activation_token=activation_token)
+            activation_token = await crud.create_activation_token(
+                db=db, user_id=user.id
+            )
     await db.commit()
 
     activation_link = generate_activation_link(activation_token.token)
@@ -233,7 +224,7 @@ async def login_user(
 
     Returns access and refresh tokens if login is successful.
     """
-    user = await get_user_by_email(db=db, email=login_data.email)
+    user = await crud.get_user_by_email(db=db, email=login_data.email)
     if user is None:
         raise HTTPException(
             status_code=401, detail="Provided email or password is incorrect"
@@ -249,7 +240,7 @@ async def login_user(
         )
 
     access_token = create_access_token(user_id=user.id)
-    refresh_token = await create_refresh_token_object(db=db, user_id=user.id)
+    refresh_token = await crud.create_refresh_token_object(db=db, user_id=user.id)
     await db.commit()
 
     return UserLoginResponseSchema(
@@ -310,7 +301,7 @@ async def refresh_access_token(
     except InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    token_object = await get_refresh_token_object_by_token(
+    token_object = await crud.get_refresh_token_object_by_token(
         db=db, token=token_data.refresh_token
     )
     if token_object is None:
@@ -336,13 +327,15 @@ async def logout_user(db: DbDep, token_data: RefreshTokenRequestSchema) -> None:
 
     The access token remains valid until it expires.
     """
-    refresh_token_object = await get_refresh_token_object_by_token(
+    refresh_token_object = await crud.get_refresh_token_object_by_token(
         db=db, token=token_data.refresh_token
     )
     if refresh_token_object is None:
         return
 
-    await delete_refresh_token_object(db=db, refresh_token_object=refresh_token_object)
+    await crud.delete_refresh_token_object(
+        db=db, refresh_token_object=refresh_token_object
+    )
     await db.commit()
 
 
@@ -389,7 +382,7 @@ async def change_password(
 
     current_user.hashed_password = hash_password(password_data.new_password)
 
-    await delete_refresh_token_objects_by_user_id(
+    await crud.delete_refresh_token_objects_by_user_id(
         db=db,
         user_id=current_user.id,
         current_token=password_data.refresh_token,
@@ -420,16 +413,18 @@ async def forgot_password(
     Endpoint returns identical message in all cases
     to avoid revealing if an email is registered and active.
     """
-    user = await get_user_by_email(db=db, email=email_data.email)
+    user = await crud.get_user_by_email(db=db, email=email_data.email)
     if user is None or not user.is_active:
         return MessageResponseSchema(
             message="If the email belongs to an active account, "
             "password reset instructions have been sent"
         )
 
-    await delete_password_reset_token_by_user_id(db=db, user_id=user.id)
+    await crud.delete_password_reset_token_by_user_id(db=db, user_id=user.id)
     plain_token = generate_token()
-    await create_password_reset_token(db=db, user_id=user.id, plain_token=plain_token)
+    await crud.create_password_reset_token(
+        db=db, user_id=user.id, plain_token=plain_token
+    )
     await db.commit()
 
     password_reset_email_body = (
@@ -472,7 +467,9 @@ async def reset_password(
     plain_token = data.password_reset_token
     hashed_token = hash_token(plain_token)
 
-    password_reset_token = await get_password_reset_token(db=db, token=hashed_token)
+    password_reset_token = await crud.get_password_reset_token(
+        db=db, token=hashed_token
+    )
     if password_reset_token is None or password_reset_token.expires_at <= datetime.now(
         timezone.utc
     ):
@@ -481,8 +478,8 @@ async def reset_password(
     user = password_reset_token.user
     user.hashed_password = hash_password(data.new_password)
 
-    await delete_refresh_token_objects_by_user_id(db=db, user_id=user.id)
-    await delete_password_reset_token_by_user_id(db=db, user_id=user.id)
+    await crud.delete_refresh_token_objects_by_user_id(db=db, user_id=user.id)
+    await crud.delete_password_reset_token_by_user_id(db=db, user_id=user.id)
     await db.commit()
 
     return MessageResponseSchema(message="Password reset successfully")
@@ -517,7 +514,7 @@ async def admin_activate_user(
     Activating an account that is already active changes nothing and returns
     200 OK with the user's details.
     """
-    user = await get_user_by_id(db=db, user_id=user_id)
+    user = await crud.get_user_by_id(db=db, user_id=user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -567,12 +564,12 @@ async def admin_change_user_group(
             status_code=403,
             detail="You cannot change your own group",
         )
-    user = await get_user_by_id(db=db, user_id=user_id)
+    user = await crud.get_user_by_id(db=db, user_id=user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
     if user.group.name != data.group_name:
-        user_group = await get_user_group_by_name(db=db, name=data.group_name)
+        user_group = await crud.get_user_group_by_name(db=db, name=data.group_name)
         if user_group is None:
             raise HTTPException(status_code=500, detail="User group not found")
 
@@ -599,19 +596,26 @@ async def admin_change_user_group(
 async def admin_list_users(
     db: DbDep,
     admin: AdminUserDep,
-    email: str | None = None,
-    offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> list[UserDetailResponseSchema]:
+    params: Annotated[UserQueryParameters, Depends()],
+    pagination: PaginationDep,
+) -> Page[UserDetailResponseSchema]:
     """
-    List users in id order. Admin only.
+    List users. Admin only.
 
-    Filter users by email with the email query parameter.
+    Filter users by their activation status and user group
+    with 'is_active' and 'group' query parameters.
 
-    Use `limit` and `offset` to page through the results (at most 100 per request),
-    and `email` to look up a single user by their email address.
+    Search users by their email, using 'search' query parameter.
+
+    Sort users by id(default) and email, using 'sort_by' and 'order'
+    with 'asc'(default) or 'desc' for ascending or descending order.
+
+    Use `page` and `page_size` to page through the results (at most 100 per request).
     """
-    return [
-        UserDetailResponseSchema.model_validate(user)
-        for user in await get_users(db=db, offset=offset, limit=limit, email=email)
-    ]
+    users = await crud.list_users(
+        db=db, offset=pagination.offset, limit=pagination.page_size, params=params
+    )
+    items = [UserDetailResponseSchema.model_validate(user) for user in users]
+    total = await crud.count_users(db=db, params=params)
+
+    return pagination.get_page(items=items, total=total)

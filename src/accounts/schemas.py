@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Annotated
 
 from pydantic import (
@@ -8,10 +9,12 @@ from pydantic import (
     BeforeValidator,
     Field,
     AliasPath,
+    StringConstraints,
 )
 
 from src.accounts.models import UserGroupEnum
 from src.accounts.validators import validate_password_complexity
+from src.core.schemas import SortOrderEnum
 
 Password = Annotated[str, AfterValidator(validate_password_complexity)]
 Email = Annotated[
@@ -64,6 +67,23 @@ class UserDetailResponseSchema(BaseModel):
     is_active: bool
 
     model_config = ConfigDict(from_attributes=True, validate_by_name=True)
+
+
+class UserSortField(str, Enum):
+    ID = "id"
+    EMAIL = "email"
+
+
+class UserQueryParameters(BaseModel):
+    is_active: bool | None = None
+    group: UserGroupEnum | None = None
+
+    search: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+    sort_by: UserSortField = UserSortField.ID
+    order: SortOrderEnum = SortOrderEnum.ASC
 
 
 class RefreshTokenRequestSchema(BaseModel):
