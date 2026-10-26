@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.schemas import ErrorResponseSchema
+from src.core.pagination import PaginationDep
+from src.core.schemas import ErrorResponseSchema, Page
 from src.accounts.dependencies import ModeratorUserDep
 from src.database.session import DbDep
 from src.movies import crud
@@ -23,6 +26,9 @@ from src.movies.schemas import (
     MovieDetailSchema,
     MovieCreateSchema,
     MovieUpdateSchema,
+    MovieQueryParameters,
+    GenreWithCountSchema,
+    MovieListItemSchema,
 )
 
 router = APIRouter()
@@ -42,12 +48,17 @@ async def get_all_objects_or_400[T: UniqueNameBase](
 
 
 @router.get("/genres", summary="List genres", tags=["genres"])
-async def list_genres(db: DbDep) -> list[NameDetailSchema]:
+async def list_genres(db: DbDep) -> list[GenreWithCountSchema]:
     """
     List genres in id order. Public.
+
+    Shows the number of movies in each genre.
     """
-    genres = await crud.list_objects(db=db, model=Genre)
-    return [NameDetailSchema.model_validate(genre) for genre in genres]
+    genres = await crud.list_genres(db=db)
+    return [
+        GenreWithCountSchema(id=genre.id, name=genre.name, movie_count=count)
+        for genre, count in genres
+    ]
 
 
 @router.post(
@@ -625,12 +636,35 @@ async def update_certification(
 
 
 @router.get("", summary="List movies", tags=["movies"])
-async def list_movies(db: DbDep) -> list[MovieDetailSchema]:
+async def list_movies(
+    db: DbDep,
+    pagination: PaginationDep,
+    params: Annotated[MovieQueryParameters, Depends()],
+) -> Page[MovieListItemSchema]:
     """
-    List movies in id order. Public.
+    List movies. Public.
+
+    Filter movies by year range, minimum IMDB or MetaScore rating and genre,
+    using 'year_from', 'year_to', 'min_imdb', 'min_meta_score' and 'genre_id'
+    query parameters.
+
+    Search movies by matches in their name, description, genres, actors
+    and directors, using 'search' query parameter.
+
+    Sort movies by id(default), name, year, duration, IMDB rating,
+    votes (popularity), MetaScore rating, gross earnings, price,
+    using 'sort_by' and 'order' with 'asc'(default) or 'desc'
+    for ascending or descending order.
+
+    Use `page` and `page_size` to page through the results (at most 100 per request).
     """
-    movies = await crud.list_movies(db=db)
-    return [MovieDetailSchema.model_validate(movie) for movie in movies]
+    movies = await crud.list_movies(
+        db=db, offset=pagination.offset, limit=pagination.page_size, params=params
+    )
+    items = [MovieListItemSchema.model_validate(movie) for movie in movies]
+    total = await crud.count_movies(db=db, params=params)
+
+    return pagination.get_page(items=items, total=total)
 
 
 @router.get(

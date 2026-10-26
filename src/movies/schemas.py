@@ -1,8 +1,11 @@
 from decimal import Decimal
+from enum import Enum
 from typing import Annotated
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, Field
+
+from src.core.schemas import SortOrderEnum
 
 Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
@@ -18,6 +21,10 @@ class NameDetailSchema(BaseModel):
     name: str
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class GenreWithCountSchema(NameDetailSchema):
+    movie_count: int
 
 
 class MovieCreateSchema(BaseModel):
@@ -73,3 +80,47 @@ class MovieDetailSchema(BaseModel):
     directors: list[NameDetailSchema]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class MovieListItemSchema(BaseModel):
+    id: int
+    name: str
+    year: int
+    time: int
+    imdb: float
+    votes: int
+    meta_score: float | None = None
+    gross: float | None = None
+    price: Decimal
+
+    certification: NameDetailSchema
+    genres: list[NameDetailSchema]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MovieSortField(str, Enum):
+    ID = "id"
+    NAME = "name"
+    YEAR = "year"
+    TIME = "time"
+    IMDB = "imdb"
+    VOTES = "votes"
+    META_SCORE = "meta_score"
+    GROSS = "gross"
+    PRICE = "price"
+
+
+class MovieQueryParameters(BaseModel):
+    year_from: int | None = Field(default=None, ge=1895)
+    year_to: int | None = Field(default=None, ge=1895)
+    min_imdb: float | None = Field(default=None, ge=0, le=10)
+    min_meta_score: float | None = Field(default=None, ge=0, le=100)
+    genre_id: int | None = None
+
+    search: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
+    ) = None
+
+    sort_by: MovieSortField = MovieSortField.ID
+    order: SortOrderEnum = SortOrderEnum.ASC
