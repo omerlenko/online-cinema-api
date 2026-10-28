@@ -20,15 +20,19 @@ async SQLAlchemy.
 - Password change for logged-in users, and password reset via an emailed, single-use token
 - Periodic cleanup of expired activation, refresh and password reset tokens
 - User groups (user, moderator, admin) with permission checks on protected endpoints
-- Admin endpoints to list users, activate accounts manually and change a user's group
+- Admin endpoints to list users (with filters, search, sorting and pagination), activate accounts manually and change a
+  user's group
 - Command to create the first admin account
 
 ### Movies
 
-- Public movie list and movie details, with certification, genres, stars and directors
+- Public, paginated movie list with filters (year range, minimum IMDb rating and Metascore, genre), search and sorting
+- Public movie details, with certification, genres, stars and directors
+- Public genre list with the number of movies in each genre
 - Moderator endpoints to create, update and delete movies
 - Moderator endpoints to manage genres, stars, directors and certifications
 - Genres, stars, directors and certifications used by a movie cannot be deleted
+- Command to load a sample catalog of 100 movies
 
 ## Tech Stack
 
@@ -78,6 +82,8 @@ docker compose logs -f celery-worker celery-beat   # follow background task logs
 4. In the interactive docs, click **Authorize** and paste the access token to call protected endpoints such as
    `GET /api/v1/accounts/me`.
 5. With a moderator or admin account, create a certification and a genre, then `POST /api/v1/movies` with their ids.
+6. Or load the sample catalog (see [Loading sample movies](#loading-sample-movies)) and browse it without logging in,
+   e.g. `GET /api/v1/movies?search=nolan&sort_by=imdb&order=desc`.
 
 ## Authentication
 
@@ -94,13 +100,16 @@ Every account belongs to one group. New accounts start in `user`.
 | Group       | Can do                                                                                   |
 |-------------|------------------------------------------------------------------------------------------|
 | `user`      | Use their own account                                                                    |
-| `moderator` | Everything a user can do; will manage the movie catalog (coming next)                    |
+| `moderator` | Everything a user can do, plus manage the movie catalog                                  |
 | `admin`     | Everything a moderator can do, plus list users, activate accounts and change user groups |
 
 Admin endpoints:
 
-- `GET /api/v1/accounts/users?limit=20&offset=0` lists users in id order, at most 100 per request. Add
-  `email=user@example.com` to look up one user.
+- `GET /api/v1/accounts/users` lists users, using the shared [pagination](#pagination) format. Optional query
+  parameters:
+    - `is_active` (`true` or `false`) and `group` (`user`, `moderator` or `admin`) filter the list.
+    - `search` matches part of the email address, ignoring letter case.
+    - `sort_by` (`id` by default, or `email`) and `order` (`asc` by default, or `desc`) set the order.
 - `POST /api/v1/accounts/users/{user_id}/activate` activates an account without the email link.
 - `POST /api/v1/accounts/users/{user_id}/change-group` with `{"group_name": "moderator"}` moves a user to another group.
   Admins can change any user's group except their own, including demoting other admins.
@@ -134,6 +143,64 @@ active. When running the API locally, use `poetry run python -m src.accounts.cre
   list removes them all.
 - Genres, stars, directors and certifications are stored as typed; a name that differs only in letter case from an
   existing one is rejected.
+
+### Browsing the catalog
+
+`GET /api/v1/movies` returns a [page](#pagination) of movies. All query parameters are optional and can be combined:
+
+| Parameter              | Effect                                                                                    |
+|------------------------|-------------------------------------------------------------------------------------------|
+| `year_from`, `year_to` | Release year range, both ends included                                                    |
+| `min_imdb`             | Minimum IMDb rating (0–10)                                                                |
+| `min_meta_score`       | Minimum Metascore (0–100); movies without one are left out                                |
+| `genre_id`             | Only movies in this genre                                                                 |
+| `search`               | Matches part of the name, description, or a genre, star or director name, ignoring case   |
+| `sort_by`              | `id` (default), `name`, `year`, `time`, `imdb`, `votes`, `meta_score`, `gross` or `price` |
+| `order`                | `asc` (default) or `desc`                                                                 |
+
+- Movies without a Metascore or box office figure are listed last, in both sort orders. Movies with equal values are
+  ordered by id, so paging through the results never skips or repeats a movie.
+- List items are short: name, year, duration, ratings, votes, box office, price, certification and genres.
+  `GET /api/v1/movies/{movie_id}` adds the description, stars and directors.
+- `GET /api/v1/movies/genres` includes `movie_count`, the number of movies in each genre.
+
+### Loading sample movies
+
+To try the catalog without entering movies by hand, load the sample data:
+
+```bash
+docker compose exec app python -m src.movies.seed
+```
+
+When running the API locally, use `poetry run python -m src.movies.seed` instead.
+
+- The whole file is validated with the same rules as `POST /api/v1/movies` before anything is written, and all movies
+  are saved in one transaction, so a failed run changes nothing.
+- The command can be run again safely: movies that already exist (same name, release year and duration) are skipped,
+  and existing genres, stars, directors and certifications are reused.
+- The sample catalog contains 100 well-known movies with original descriptions written for this project. Ratings,
+  votes and box office figures are approximate. The data is not affiliated with or taken from IMDb.
+
+## Pagination
+
+Both lists (`GET /api/v1/movies` and the admin user list) take `page` (default 1) and `page_size` (default 20, at most
+100), and return:
+
+```json
+{
+  "items": [],
+  "total": 42,
+  "page": 2,
+  "page_size": 20,
+  "previous_page": "http://localhost:8000/api/v1/movies?genre_id=3&page=1&page_size=20",
+  "next_page": "http://localhost:8000/api/v1/movies?genre_id=3&page=3&page_size=20"
+}
+```
+
+- `total` counts every match, not just the current page.
+- `previous_page` and `next_page` are full links that keep the filters, search and sorting of the current request, or
+  `null` on the first or last page.
+- A page past the end returns an empty `items` list, not an error.
 
 ## Background Tasks
 
@@ -197,14 +264,14 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
   rights of all the others.
 - **The first admin is created on the server**, never through the API. The password is typed at a hidden prompt rather
   than passed as an argument, so it does not end up in shell history.
-- **The user list uses `limit`/`offset` paging**, at most 100 users per request. It will move to the shared
-  pagination format when the movie catalog adds one.
 - **Catalog data in use cannot be deleted.** Deleting a genre, star, director or certification that a movie still uses
   is refused with 409. Deleting a movie removes its links but keeps the genres, stars and directors.
 - **Duplicate names are caught only by letter case.** "Drama" and "drama" are the same genre, but different spellings
   of one thing, such as "Sci-Fi" and "Science Fiction", are not detected. Moderators keep these lists clean.
 - **In `PATCH`, `null` means "no change"**, so the optional `meta_score` and `gross` cannot be cleared back to empty.
-- **The movie list is not paginated yet.** Pagination, filtering, sorting and search come with the catalog.
+- **The genre filter takes one genre at a time.** Movies in several genres can be found by any one of them.
+- **Search uses a simple case-insensitive substring match** (`ILIKE`), without a full-text index. That is fast enough
+  for a catalog of this size, but would need a search index for a much larger one.
 
 ## Configuration
 
@@ -301,9 +368,9 @@ poetry run mypy .
 ```
 src/
 ├── accounts/       # registration, authentication, user groups, admin command, token cleanup task
-├── core/           # settings, security (hashing, JWT), email sending, shared schemas
+├── core/           # settings, security (hashing, JWT), email sending, pagination, shared schemas
 ├── database/       # engine, sessions, declarative base
-├── movies/         # movies, genres, stars, directors, certifications: models, schemas, endpoints
+├── movies/         # movies, genres, stars, directors, certifications: models, schemas, endpoints, sample data command
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
 migrations/     # Alembic database migrations
