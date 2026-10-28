@@ -50,10 +50,30 @@ async def test_list(
         object_2.id,
         object_3.id,
     ], "Expected ids are not in the response."
-    assert response.json()[0] == {
-        "id": object_1.id,
-        "name": "Drama",
-    }, "Response does not have the expected structure."
+    assert response.json()[0]["id"] == object_1.id
+    assert response.json()[0]["name"] == "Drama"
+
+
+async def test_list_genres_movie_count(
+    client: AsyncClient,
+    create_unique_name_object: Callable[..., Awaitable[UniqueNameBase]],
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    genre_1 = await create_unique_name_object(name="Drama", model=Genre)
+    genre_2 = await create_unique_name_object(name="Thriller", model=Genre)
+    genre_3 = await create_unique_name_object(name="Comedy", model=Genre)
+    await create_movie(name="Movie 1", genres=[genre_1])
+    await create_movie(name="Movie 2", genres=[genre_2])
+
+    response = await client.get(f"{MOVIES_URL}/genres")
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert response.json()[0] == {"id": genre_1.id, "name": "Drama", "movie_count": 1}
+    assert response.json()[1] == {
+        "id": genre_2.id,
+        "name": "Thriller",
+        "movie_count": 1,
+    }
+    assert response.json()[2] == {"id": genre_3.id, "name": "Comedy", "movie_count": 0}
 
 
 @pytest.mark.parametrize("url_segment, model", FULL_CRUD_TABLES)

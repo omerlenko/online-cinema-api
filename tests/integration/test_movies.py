@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload, joinedload
 
 from src.accounts.models import UserGroupEnum
 from src.accounts.models import User
@@ -16,7 +17,9 @@ from src.movies.models import (
     Director,
     Certification,
 )
-from tests.helpers import auth_headers, create_movie_payload
+from src.movies.schemas import MovieSeedSchema
+from src.movies.seed import seed_movie
+from tests.helpers import auth_headers, create_movie_payload, seed_movie_payload
 
 settings = get_settings()
 MOVIES_URL = f"{settings.API_VERSION_PREFIX}/movies"
@@ -189,18 +192,210 @@ async def test_list_movies(
     client: AsyncClient,
     create_movie: Callable[..., Awaitable[Movie]],
 ):
-    movie_1 = await create_movie(name="Test Movie 1")
-    movie_2 = await create_movie(name="Test Movie 2")
-    movie_3 = await create_movie(name="Test Movie 3")
+    movie_1 = await create_movie(name="Movie 1")
+    movie_2 = await create_movie(name="Movie 2")
+    movie_3 = await create_movie(name="Movie 3")
 
     response = await client.get(MOVIES_URL)
     assert response.status_code == 200, "Expected status code 200 OK"
-    response_ids = [item["id"] for item in response.json()]
+    response_ids = [item["id"] for item in response.json()["items"]]
     assert response_ids == [
         movie_1.id,
         movie_2.id,
         movie_3.id,
     ], "Expected ids are not in the response."
+
+
+async def test_list_movies_filter_by_year(
+    client: AsyncClient,
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    movie_1 = await create_movie(name="Movie 1", year=1995)
+    movie_2 = await create_movie(name="Movie 2", year=2000)
+    await create_movie(name="Movie 3", year=1994)
+    await create_movie(name="Movie 4", year=2001)
+
+    query_params = {"year_from": 1995, "year_to": 2000}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_1.id,
+        movie_2.id,
+    ], "Expected ids are not in the response."
+    assert response.json()["total"] == 2, "Total items counter is not correct."
+
+
+async def test_list_movies_filter_by_min_imdb(
+    client: AsyncClient,
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    movie_1 = await create_movie(name="Movie 1", imdb=7)
+    movie_2 = await create_movie(name="Movie 2", imdb=7.5)
+    await create_movie(name="Movie 3", imdb=6.5)
+
+    query_params = {"min_imdb": 7}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_1.id,
+        movie_2.id,
+    ], "Expected ids are not in the response."
+
+
+async def test_list_movies_filter_by_min_meta_score(
+    client: AsyncClient,
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    movie_1 = await create_movie(name="Movie 1", meta_score=67)
+    movie_2 = await create_movie(name="Movie 2", meta_score=69)
+    movie_3 = await create_movie(name="Movie 3", meta_score=60)
+    await create_movie(name="Movie 4", meta_score=50)
+
+    query_params = {"min_meta_score": 60}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_1.id,
+        movie_2.id,
+        movie_3.id,
+    ], "Expected ids are not in the response."
+
+
+async def test_list_movies_filter_by_genre(
+    client: AsyncClient,
+    create_unique_name_object: Callable[..., Awaitable[UniqueNameBase]],
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    genre_1 = await create_unique_name_object(name="Drama", model=Genre)
+    genre_2 = await create_unique_name_object(name="Thriller", model=Genre)
+    movie_1 = await create_movie(name="Movie 1", genres=[genre_1])
+    movie_2 = await create_movie(name="Movie 2", genres=[genre_1, genre_2])
+    await create_movie(name="Movie 3", genres=[genre_2])
+
+    query_params = {"genre_id": genre_1.id}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_1.id,
+        movie_2.id,
+    ], "Expected ids are not in the response."
+
+
+async def test_list_movies_search(
+    client: AsyncClient,
+    create_unique_name_object: Callable[..., Awaitable[UniqueNameBase]],
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    genre = await create_unique_name_object(name="Keyword Genre", model=Genre)
+    star = await create_unique_name_object(name="Keyword Star", model=Star)
+    director = await create_unique_name_object(name="Keyword Director", model=Director)
+    movie_1 = await create_movie(
+        name="Keyword",
+    )
+    movie_2 = await create_movie(name="Movie 2", description="Keyword")
+    movie_3 = await create_movie(name="Movie 3", genres=[genre])
+    movie_4 = await create_movie(name="Movie 4", stars=[star])
+    movie_5 = await create_movie(name="Movie 5", directors=[director])
+    await create_movie(
+        name="Movie 6", description="Movie", genres=[], stars=[], directors=[]
+    )
+
+    query_params = {"search": "key"}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_1.id,
+        movie_2.id,
+        movie_3.id,
+        movie_4.id,
+        movie_5.id,
+    ], "Expected ids are not in the response."
+
+
+async def test_list_movies_sort_by_meta_score_ascending(
+    client: AsyncClient,
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    movie_1 = await create_movie(name="Movie 1")
+    movie_2 = await create_movie(name="Movie 2", meta_score=30)
+    movie_3 = await create_movie(name="Movie 3")
+    movie_4 = await create_movie(name="Movie 4", meta_score=90)
+    movie_5 = await create_movie(name="Movie 5", meta_score=60)
+
+    query_params = {"sort_by": "meta_score"}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_2.id,
+        movie_5.id,
+        movie_4.id,
+        movie_1.id,
+        movie_3.id,
+    ], "IDs are not in the expected order."
+
+
+async def test_list_movies_sort_by_meta_score_descending(
+    client: AsyncClient,
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    movie_1 = await create_movie(name="Movie 1")
+    movie_2 = await create_movie(name="Movie 2", meta_score=30)
+    movie_3 = await create_movie(name="Movie 3")
+    movie_4 = await create_movie(name="Movie 4", meta_score=90)
+    movie_5 = await create_movie(name="Movie 5", meta_score=60)
+
+    query_params = {"sort_by": "meta_score", "order": "desc"}
+
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        movie_4.id,
+        movie_5.id,
+        movie_2.id,
+        movie_1.id,
+        movie_3.id,
+    ], "IDs are not in the expected order."
+
+
+async def test_list_movies_pagination(
+    client: AsyncClient,
+    create_movie: Callable[..., Awaitable[Movie]],
+):
+    await create_movie(name="Movie 1")
+    await create_movie(name="Movie 2")
+    await create_movie(name="Movie 3")
+
+    query_params = {"page": 1, "page_size": 1}
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert response.json()["total"] == 3, "Total items counter is not correct."
+    assert response.json()["previous_page"] is None
+    assert "?page=2&page_size=1" in response.json()["next_page"]
+
+    query_params = {"page": 2, "page_size": 1}
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert "?page=1&page_size=1" in response.json()["previous_page"]
+    assert "?page=3&page_size=1" in response.json()["next_page"]
+
+    query_params = {"page": 3, "page_size": 1}
+    response = await client.get(MOVIES_URL, params=query_params)
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert "?page=2&page_size=1" in response.json()["previous_page"]
+    assert response.json()["next_page"] is None
 
 
 async def test_delete_movie(
@@ -391,3 +586,46 @@ async def test_create_movie_invalid_inputs(
         MOVIES_URL, json=payload, headers=auth_headers(moderator)
     )
     assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
+
+
+async def test_seed_movie(
+    db_session: AsyncSession,
+    create_unique_name_object: Callable[..., Awaitable[UniqueNameBase]],
+):
+    await create_unique_name_object(name="Drama", model=Genre)
+    movie_data = MovieSeedSchema.model_validate(
+        seed_movie_payload(genres=["Crime", "drama"])
+    )
+
+    await seed_movie(db=db_session, movie_data=movie_data)
+
+    created_movie = await db_session.scalar(
+        select(Movie)
+        .where(Movie.name == movie_data.name)
+        .options(
+            joinedload(Movie.certification),
+            selectinload(Movie.genres),
+            selectinload(Movie.stars),
+            selectinload(Movie.directors),
+        )
+    )
+    assert created_movie is not None
+    assert created_movie.certification.name == movie_data.certification
+
+    assert {genre.name for genre in created_movie.genres} == {"Crime", "Drama"}
+    assert {star.name for star in created_movie.stars} == set(movie_data.stars)
+    assert {director.name for director in created_movie.directors} == set(
+        movie_data.directors
+    )
+
+
+async def test_seed_movie_skips_existing_movie(
+    db_session: AsyncSession,
+):
+    movie_data = MovieSeedSchema.model_validate(seed_movie_payload())
+
+    assert await seed_movie(db=db_session, movie_data=movie_data) is True
+    assert await seed_movie(db=db_session, movie_data=movie_data) is False
+
+    created_movies = await db_session.scalars(select(Movie))
+    assert len(created_movies.all()) == 1

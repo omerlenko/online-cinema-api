@@ -1285,13 +1285,13 @@ async def test_list_users(
         headers=auth_headers(admin_user),
     )
     assert response.status_code == 200, "Expected status code 200 OK"
-    response_ids = [item["id"] for item in response.json()]
+    response_ids = [item["id"] for item in response.json()["items"]]
     assert response_ids == [
         admin_user.id,
         user_1.id,
         user_2.id,
     ], "Expected ids are not in the response."
-    assert response.json()[1] == {
+    assert response.json()["items"][1] == {
         "id": user_1.id,
         "email": "user_1@example.com",
         "group_name": "user",
@@ -1299,30 +1299,62 @@ async def test_list_users(
     }, "Response does not have the expected structure."
 
 
-async def test_list_users_filter_by_email(
-    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+async def test_list_users_filter_by_is_active(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
 ):
     admin_user = await create_user(
         email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
     )
-    await create_user(
+    user_1 = await create_user(
         email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
     )
-    user_2 = await create_user(
+    await create_user(
         email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
     )
 
+    query_params = {"is_active": True}
+
     response = await client.get(
-        f"{ACCOUNTS_URL}/users",
-        params={"email": "user_2@example.com"},
-        headers=auth_headers(admin_user),
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
     )
     assert response.status_code == 200, "Expected status code 200 OK"
-    response_ids = [item["id"] for item in response.json()]
-    assert response_ids == [user_2.id], "Expected ids are not in the response."
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        admin_user.id,
+        user_1.id,
+    ], "Expected ids are not in the response."
+    assert response.json()["total"] == 2, "Total items counter is not correct."
 
 
-async def test_list_users_with_limit_and_offset(
+async def test_list_users_filter_by_group(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin_user_1 = await create_user(
+        email="admin_1@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    admin_user_2 = await create_user(
+        email="admin_2@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    await create_user(
+        email="user_1@example.com", is_active=False, user_group=UserGroupEnum.USER
+    )
+
+    query_params = {"group": "admin"}
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user_1)
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        admin_user_1.id,
+        admin_user_2.id,
+    ], "Expected ids are not in the response."
+
+
+async def test_list_users_search(
     client: AsyncClient, create_user: Callable[..., Awaitable[User]]
 ):
     admin_user = await create_user(
@@ -1331,30 +1363,123 @@ async def test_list_users_with_limit_and_offset(
     user_1 = await create_user(
         email="user_1@example.com", is_active=True, user_group=UserGroupEnum.USER
     )
-    user_2 = await create_user(
+    await create_user(
         email="user_2@example.com", is_active=False, user_group=UserGroupEnum.USER
     )
 
-    response_limit = await client.get(
-        f"{ACCOUNTS_URL}/users",
-        params={"limit": 2, "offset": 0},
-        headers=auth_headers(admin_user),
+    query_params = {"search": "user_1@example.com"}
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
     )
-    assert response_limit.status_code == 200, "Expected status code 200 OK"
-    response_ids = [item["id"] for item in response_limit.json()]
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [user_1.id], "Expected ids are not in the response."
+
+
+async def test_list_users_sort_by_email_ascending(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_1 = await create_user(
+        email="evelyn@example.com",
+    )
+    user_2 = await create_user(
+        email="bob@example.com",
+    )
+    user_3 = await create_user(
+        email="dylan@example.com",
+    )
+    user_4 = await create_user(
+        email="charlie@example.com",
+    )
+
+    query_params = {"sort_by": "email"}
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
     assert response_ids == [
         admin_user.id,
+        user_2.id,
+        user_4.id,
+        user_3.id,
         user_1.id,
-    ], "Expected ids are not in the response."
+    ], "IDs are not in the expected order."
 
-    response_offset = await client.get(
-        f"{ACCOUNTS_URL}/users",
-        params={"limit": 2, "offset": 2},
-        headers=auth_headers(admin_user),
+
+async def test_list_users_sort_by_email_descending(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
     )
-    assert response_offset.status_code == 200, "Expected status code 200 OK"
-    response_ids = [item["id"] for item in response_offset.json()]
-    assert response_ids == [user_2.id], "Expected id is not in the response."
+    user_1 = await create_user(
+        email="evelyn@example.com",
+    )
+    user_2 = await create_user(
+        email="bob@example.com",
+    )
+    user_3 = await create_user(
+        email="dylan@example.com",
+    )
+    user_4 = await create_user(
+        email="charlie@example.com",
+    )
+
+    query_params = {"sort_by": "email", "order": "desc"}
+
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [
+        user_1.id,
+        user_3.id,
+        user_4.id,
+        user_2.id,
+        admin_user.id,
+    ], "IDs are not in the expected order."
+
+
+async def test_list_users_pagination(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    admin_user = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    await create_user(email="user_1@example.com")
+    await create_user(email="user_2@example.com")
+
+    query_params = {"page": 1, "page_size": 1}
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert response.json()["total"] == 3, "Total items counter is not correct."
+    assert response.json()["previous_page"] is None
+    assert "?page=2&page_size=1" in response.json()["next_page"]
+
+    query_params = {"page": 2, "page_size": 1}
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert "?page=1&page_size=1" in response.json()["previous_page"]
+    assert "?page=3&page_size=1" in response.json()["next_page"]
+
+    query_params = {"page": 3, "page_size": 1}
+    response = await client.get(
+        f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    assert "?page=2&page_size=1" in response.json()["previous_page"]
+    assert response.json()["next_page"] is None
 
 
 async def test_list_users_with_no_permission(
