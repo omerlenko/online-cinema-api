@@ -4,6 +4,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select, exists
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload, joinedload
 
 from src.accounts.models import UserGroupEnum
 from src.accounts.models import User
@@ -16,7 +17,9 @@ from src.movies.models import (
     Director,
     Certification,
 )
-from tests.helpers import auth_headers, create_movie_payload
+from src.movies.schemas import MovieSeedSchema
+from src.movies.seed import seed_movie
+from tests.helpers import auth_headers, create_movie_payload, seed_movie_payload
 
 settings = get_settings()
 MOVIES_URL = f"{settings.API_VERSION_PREFIX}/movies"
@@ -583,3 +586,46 @@ async def test_create_movie_invalid_inputs(
         MOVIES_URL, json=payload, headers=auth_headers(moderator)
     )
     assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
+
+
+async def test_seed_movie(
+    db_session: AsyncSession,
+    create_unique_name_object: Callable[..., Awaitable[UniqueNameBase]],
+):
+    await create_unique_name_object(name="Drama", model=Genre)
+    movie_data = MovieSeedSchema.model_validate(
+        seed_movie_payload(genres=["Crime", "drama"])
+    )
+
+    await seed_movie(db=db_session, movie_data=movie_data)
+
+    created_movie = await db_session.scalar(
+        select(Movie)
+        .where(Movie.name == movie_data.name)
+        .options(
+            joinedload(Movie.certification),
+            selectinload(Movie.genres),
+            selectinload(Movie.stars),
+            selectinload(Movie.directors),
+        )
+    )
+    assert created_movie is not None
+    assert created_movie.certification.name == movie_data.certification
+
+    assert {genre.name for genre in created_movie.genres} == {"Crime", "Drama"}
+    assert {star.name for star in created_movie.stars} == set(movie_data.stars)
+    assert {director.name for director in created_movie.directors} == set(
+        movie_data.directors
+    )
+
+
+async def test_seed_movie_skips_existing_movie(
+    db_session: AsyncSession,
+):
+    movie_data = MovieSeedSchema.model_validate(seed_movie_payload())
+
+    assert await seed_movie(db=db_session, movie_data=movie_data) is True
+    assert await seed_movie(db=db_session, movie_data=movie_data) is False
+
+    created_movies = await db_session.scalars(select(Movie))
+    assert len(created_movies.all()) == 1

@@ -72,3 +72,26 @@ def create_movie_payload(
     if kwargs:
         movie_payload.update(**kwargs)
     return movie_payload
+
+
+def seed_movie_payload(
+    **kwargs,
+) -> dict[str, Any]:
+    movie_seed_data = {
+        "name": "The Godfather",
+        "year": 1972,
+        "time": 175,
+        "imdb": 9.2,
+        "votes": 2050000,
+        "meta_score": 100,
+        "gross": 134966411,
+        "price": "5.99",
+        "certification": "R",
+        "genres": ["Crime", "Drama"],
+        "directors": ["Francis Ford Coppola"],
+        "stars": ["Marlon Brando", "Al Pacino", "James Caan", "Diane Keaton"],
+        "description": "Test Movie Description",
+    }
+    if kwargs:
+        movie_seed_data.update(**kwargs)
+    return movie_seed_data
