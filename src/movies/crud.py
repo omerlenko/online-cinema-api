@@ -14,10 +14,10 @@ from src.movies.models import (
 )
 from src.movies.schemas import (
     NameCreateSchema,
-    MovieCreateSchema,
     MovieUpdateSchema,
     MovieQueryParameters,
     MovieSortField,
+    MovieBaseSchema,
 )
 
 
@@ -176,16 +176,14 @@ async def get_movie_by_name_year_time(
 
 async def create_movie(
     db: AsyncSession,
-    data: MovieCreateSchema,
+    data: MovieBaseSchema,
     certification: Certification,
     genres: list[Genre],
     stars: list[Star],
     directors: list[Director],
 ) -> Movie:
     movie = Movie(
-        **data.model_dump(
-            exclude={"certification_id", "genre_ids", "star_ids", "director_ids"}
-        ),
+        **data.model_dump(include=set(MovieBaseSchema.model_fields)),
         certification=certification,
         genres=genres,
         stars=stars,

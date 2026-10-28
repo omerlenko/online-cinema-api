@@ -27,7 +27,7 @@ class GenreWithCountSchema(NameDetailSchema):
     movie_count: int
 
 
-class MovieCreateSchema(BaseModel):
+class MovieBaseSchema(BaseModel):
     name: Name
     year: int = Field(ge=1895)
     time: int = Field(ge=1)
@@ -38,6 +38,15 @@ class MovieCreateSchema(BaseModel):
     description: str
     price: Decimal = Field(ge=0)
 
+
+class MovieSeedSchema(MovieBaseSchema):
+    certification: Name
+    genres: list[Name]
+    stars: list[Name]
+    directors: list[Name]
+
+
+class MovieCreateSchema(MovieBaseSchema):
     certification_id: int
     genre_ids: list[int]
     star_ids: list[int]
