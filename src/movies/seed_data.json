@@ -1,0 +1,2571 @@
+[
+  {
+    "name": "The Shawshank Redemption",
+    "year": 1994,
+    "time": 142,
+    "imdb": 9.3,
+    "votes": 2950000,
+    "meta_score": 82,
+    "gross": 28341469,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Drama"
+    ],
+    "directors": [
+      "Frank Darabont"
+    ],
+    "stars": [
+      "Tim Robbins",
+      "Morgan Freeman",
+      "Bob Gunton",
+      "William Sadler"
+    ],
+    "description": "A banker sentenced to life for a crime he insists he did not commit spends two decades in a brutal prison, holding on to hope and an unlikely friendship."
+  },
+  {
+    "name": "The Godfather",
+    "year": 1972,
+    "time": 175,
+    "imdb": 9.2,
+    "votes": 2050000,
+    "meta_score": 100,
+    "gross": 134966411,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Francis Ford Coppola"
+    ],
+    "stars": [
+      "Marlon Brando",
+      "Al Pacino",
+      "James Caan",
+      "Diane Keaton"
+    ],
+    "description": "The aging head of a New York crime family hands power to his reluctant youngest son, who is drawn step by step into the family business."
+  },
+  {
+    "name": "The Dark Knight",
+    "year": 2008,
+    "time": 152,
+    "imdb": 9.0,
+    "votes": 2900000,
+    "meta_score": 84,
+    "gross": 534858444,
+    "price": "12.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "stars": [
+      "Christian Bale",
+      "Heath Ledger",
+      "Aaron Eckhart",
+      "Michael Caine"
+    ],
+    "description": "Batman, a determined police lieutenant and a new district attorney try to dismantle Gotham's mob, until a chaotic criminal called the Joker pushes all of them to their limits."
+  },
+  {
+    "name": "The Godfather Part II",
+    "year": 1974,
+    "time": 202,
+    "imdb": 9.0,
+    "votes": 1400000,
+    "meta_score": 90,
+    "gross": 57300000,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Francis Ford Coppola"
+    ],
+    "stars": [
+      "Al Pacino",
+      "Robert De Niro",
+      "Robert Duvall",
+      "Diane Keaton"
+    ],
+    "description": "Michael Corleone tightens his grip on the family empire, while the story of his father's rise from a Sicilian orphan to a New York boss unfolds in parallel."
+  },
+  {
+    "name": "12 Angry Men",
+    "year": 1957,
+    "time": 96,
+    "imdb": 9.0,
+    "votes": 900000,
+    "meta_score": 97,
+    "gross": 4360000,
+    "price": "5.99",
+    "certification": "Approved",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Sidney Lumet"
+    ],
+    "stars": [
+      "Henry Fonda",
+      "Lee J. Cobb",
+      "Martin Balsam",
+      "John Fiedler"
+    ],
+    "description": "In a hot jury room, one juror's doubt about a murder case slowly forces eleven others to look again at the evidence and at themselves."
+  },
+  {
+    "name": "Schindler's List",
+    "year": 1993,
+    "time": 195,
+    "imdb": 9.0,
+    "votes": 1500000,
+    "meta_score": 95,
+    "gross": 96898818,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Biography",
+      "Drama",
+      "History"
+    ],
+    "directors": [
+      "Steven Spielberg"
+    ],
+    "stars": [
+      "Liam Neeson",
+      "Ralph Fiennes",
+      "Ben Kingsley",
+      "Caroline Goodall"
+    ],
+    "description": "A German businessman in occupied Poland turns his factory into a refuge and saves more than a thousand Jewish workers from the Holocaust."
+  },
+  {
+    "name": "The Lord of the Rings: The Return of the King",
+    "year": 2003,
+    "time": 201,
+    "imdb": 9.0,
+    "votes": 2000000,
+    "meta_score": 94,
+    "gross": 377845905,
+    "price": "9.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Peter Jackson"
+    ],
+    "stars": [
+      "Elijah Wood",
+      "Viggo Mortensen",
+      "Ian McKellen",
+      "Orlando Bloom"
+    ],
+    "description": "As the armies of Middle-earth gather for a final battle, two hobbits struggle toward Mount Doom to destroy the One Ring."
+  },
+  {
+    "name": "Pulp Fiction",
+    "year": 1994,
+    "time": 154,
+    "imdb": 8.9,
+    "votes": 2300000,
+    "meta_score": 95,
+    "gross": 107928762,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Quentin Tarantino"
+    ],
+    "stars": [
+      "John Travolta",
+      "Uma Thurman",
+      "Samuel L. Jackson",
+      "Bruce Willis"
+    ],
+    "description": "Two hitmen, a boxer, a gangster's wife and a pair of diner robbers cross paths in interlocking stories told out of order."
+  },
+  {
+    "name": "The Lord of the Rings: The Fellowship of the Ring",
+    "year": 2001,
+    "time": 178,
+    "imdb": 8.9,
+    "votes": 2000000,
+    "meta_score": 92,
+    "gross": 315544750,
+    "price": "9.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Peter Jackson"
+    ],
+    "stars": [
+      "Elijah Wood",
+      "Ian McKellen",
+      "Orlando Bloom",
+      "Sean Bean"
+    ],
+    "description": "A young hobbit inherits a ring of terrible power and sets out with eight companions to carry it away from the Shire."
+  },
+  {
+    "name": "Forrest Gump",
+    "year": 1994,
+    "time": 142,
+    "imdb": 8.8,
+    "votes": 2300000,
+    "meta_score": 82,
+    "gross": 330252182,
+    "price": "7.99",
+    "certification": "PG-13",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "directors": [
+      "Robert Zemeckis"
+    ],
+    "stars": [
+      "Tom Hanks",
+      "Robin Wright",
+      "Gary Sinise",
+      "Sally Field"
+    ],
+    "description": "A kind man from Alabama drifts through decades of American history while never losing his love for his childhood friend."
+  },
+  {
+    "name": "Fight Club",
+    "year": 1999,
+    "time": 139,
+    "imdb": 8.8,
+    "votes": 2400000,
+    "meta_score": 67,
+    "gross": 37030102,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Drama"
+    ],
+    "directors": [
+      "David Fincher"
+    ],
+    "stars": [
+      "Brad Pitt",
+      "Edward Norton",
+      "Meat Loaf",
+      "Zach Grenier"
+    ],
+    "description": "An insomniac office worker and a reckless soap salesman start an underground fight club that grows into something far more dangerous."
+  },
+  {
+    "name": "The Lord of the Rings: The Two Towers",
+    "year": 2002,
+    "time": 179,
+    "imdb": 8.8,
+    "votes": 1800000,
+    "meta_score": 87,
+    "gross": 342551365,
+    "price": "9.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Peter Jackson"
+    ],
+    "stars": [
+      "Elijah Wood",
+      "Ian McKellen",
+      "Viggo Mortensen",
+      "Orlando Bloom"
+    ],
+    "description": "The fellowship is scattered: two hobbits press on toward Mordor with a strange guide, while their friends defend a kingdom under siege."
+  },
+  {
+    "name": "Inception",
+    "year": 2010,
+    "time": 148,
+    "imdb": 8.8,
+    "votes": 2600000,
+    "meta_score": 74,
+    "gross": 292576195,
+    "price": "12.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "stars": [
+      "Leonardo DiCaprio",
+      "Joseph Gordon-Levitt",
+      "Elliot Page",
+      "Ken Watanabe"
+    ],
+    "description": "A thief who steals secrets from people's dreams is offered a way home if he can do the reverse: plant an idea deep in a target's mind."
+  },
+  {
+    "name": "Star Wars: Episode V - The Empire Strikes Back",
+    "year": 1980,
+    "time": 124,
+    "imdb": 8.7,
+    "votes": 1400000,
+    "meta_score": 82,
+    "gross": 290475067,
+    "price": "7.99",
+    "certification": "PG",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
+    "directors": [
+      "Irvin Kershner"
+    ],
+    "stars": [
+      "Mark Hamill",
+      "Harrison Ford",
+      "Carrie Fisher",
+      "Billy Dee Williams"
+    ],
+    "description": "While the rebels flee the Empire, Luke Skywalker trains with a Jedi master and learns a truth that changes everything."
+  },
+  {
+    "name": "The Matrix",
+    "year": 1999,
+    "time": 136,
+    "imdb": 8.7,
+    "votes": 2100000,
+    "meta_score": 73,
+    "gross": 171479930,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Lana Wachowski",
+      "Lilly Wachowski"
+    ],
+    "stars": [
+      "Keanu Reeves",
+      "Laurence Fishburne",
+      "Carrie-Anne Moss",
+      "Hugo Weaving"
+    ],
+    "description": "A hacker discovers that the world around him is a simulation and joins a small group of rebels fighting the machines that built it."
+  },
+  {
+    "name": "Goodfellas",
+    "year": 1990,
+    "time": 145,
+    "imdb": 8.7,
+    "votes": 1300000,
+    "meta_score": 92,
+    "gross": 46836394,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Martin Scorsese"
+    ],
+    "stars": [
+      "Robert De Niro",
+      "Ray Liotta",
+      "Joe Pesci",
+      "Lorraine Bracco"
+    ],
+    "description": "A young man from Brooklyn rises through the ranks of the mob over three decades, until paranoia and betrayal catch up with him."
+  },
+  {
+    "name": "One Flew Over the Cuckoo's Nest",
+    "year": 1975,
+    "time": 133,
+    "imdb": 8.7,
+    "votes": 1100000,
+    "meta_score": 84,
+    "gross": 112000000,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Drama"
+    ],
+    "directors": [
+      "Milos Forman"
+    ],
+    "stars": [
+      "Jack Nicholson",
+      "Louise Fletcher",
+      "Michael Berryman",
+      "Peter Brocco"
+    ],
+    "description": "A rebellious convict fakes insanity to serve his sentence in a psychiatric ward, where he clashes with a cold, controlling head nurse."
+  },
+  {
+    "name": "Interstellar",
+    "year": 2014,
+    "time": 169,
+    "imdb": 8.7,
+    "votes": 2200000,
+    "meta_score": 74,
+    "gross": 188020017,
+    "price": "12.99",
+    "certification": "PG-13",
+    "genres": [
+      "Adventure",
+      "Drama",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "stars": [
+      "Matthew McConaughey",
+      "Anne Hathaway",
+      "Jessica Chastain",
+      "Mackenzie Foy"
+    ],
+    "description": "With Earth dying, a former pilot leaves his children behind to travel through a wormhole in search of a new home for humanity."
+  },
+  {
+    "name": "Se7en",
+    "year": 1995,
+    "time": 127,
+    "imdb": 8.6,
+    "votes": 1800000,
+    "meta_score": 65,
+    "gross": 100125643,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "directors": [
+      "David Fincher"
+    ],
+    "stars": [
+      "Morgan Freeman",
+      "Brad Pitt",
+      "Kevin Spacey",
+      "Andrew Kevin Walker"
+    ],
+    "description": "Two detectives, one about to retire and one just arrived, hunt a killer who stages each murder around one of the seven deadly sins."
+  },
+  {
+    "name": "It's a Wonderful Life",
+    "year": 1946,
+    "time": 130,
+    "imdb": 8.6,
+    "votes": 500000,
+    "meta_score": 89,
+    "gross": null,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Drama",
+      "Family",
+      "Fantasy"
+    ],
+    "directors": [
+      "Frank Capra"
+    ],
+    "stars": [
+      "James Stewart",
+      "Donna Reed",
+      "Lionel Barrymore",
+      "Thomas Mitchell"
+    ],
+    "description": "On a desperate Christmas Eve, a small-town banker is shown by an angel what his town would have become if he had never been born."
+  },
+  {
+    "name": "The Silence of the Lambs",
+    "year": 1991,
+    "time": 118,
+    "imdb": 8.6,
+    "votes": 1600000,
+    "meta_score": 86,
+    "gross": 130742922,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "directors": [
+      "Jonathan Demme"
+    ],
+    "stars": [
+      "Jodie Foster",
+      "Anthony Hopkins",
+      "Lawrence A. Bonney",
+      "Kasi Lemmons"
+    ],
+    "description": "A young FBI trainee seeks the help of an imprisoned, brilliant and manipulative psychiatrist to catch a serial killer."
+  },
+  {
+    "name": "Saving Private Ryan",
+    "year": 1998,
+    "time": 169,
+    "imdb": 8.6,
+    "votes": 1500000,
+    "meta_score": 91,
+    "gross": 216540909,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "War"
+    ],
+    "directors": [
+      "Steven Spielberg"
+    ],
+    "stars": [
+      "Tom Hanks",
+      "Matt Damon",
+      "Tom Sizemore",
+      "Edward Burns"
+    ],
+    "description": "After the D-Day landings, a small squad of soldiers is sent behind enemy lines to find one paratrooper and bring him home."
+  },
+  {
+    "name": "The Green Mile",
+    "year": 1999,
+    "time": 189,
+    "imdb": 8.6,
+    "votes": 1400000,
+    "meta_score": 61,
+    "gross": 136801374,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Fantasy"
+    ],
+    "directors": [
+      "Frank Darabont"
+    ],
+    "stars": [
+      "Tom Hanks",
+      "Michael Clarke Duncan",
+      "David Morse",
+      "Bonnie Hunt"
+    ],
+    "description": "A death row guard in the 1930s comes to believe that a gentle giant awaiting execution has a miraculous gift."
+  },
+  {
+    "name": "Star Wars",
+    "year": 1977,
+    "time": 121,
+    "imdb": 8.6,
+    "votes": 1500000,
+    "meta_score": 90,
+    "gross": 322740140,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Fantasy"
+    ],
+    "directors": [
+      "George Lucas"
+    ],
+    "stars": [
+      "Mark Hamill",
+      "Harrison Ford",
+      "Carrie Fisher",
+      "Alec Guinness"
+    ],
+    "description": "A farm boy joins a smuggler, a princess and an old knight to rescue the rebellion from a planet-destroying battle station."
+  },
+  {
+    "name": "Terminator 2: Judgment Day",
+    "year": 1991,
+    "time": 137,
+    "imdb": 8.6,
+    "votes": 1200000,
+    "meta_score": 75,
+    "gross": 204843350,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "James Cameron"
+    ],
+    "stars": [
+      "Arnold Schwarzenegger",
+      "Linda Hamilton",
+      "Edward Furlong",
+      "Robert Patrick"
+    ],
+    "description": "A reprogrammed machine is sent back in time to protect a teenage boy from a far more advanced killer robot."
+  },
+  {
+    "name": "Back to the Future",
+    "year": 1985,
+    "time": 116,
+    "imdb": 8.5,
+    "votes": 1300000,
+    "meta_score": 87,
+    "gross": 210609762,
+    "price": "7.99",
+    "certification": "PG",
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Robert Zemeckis"
+    ],
+    "stars": [
+      "Michael J. Fox",
+      "Christopher Lloyd",
+      "Lea Thompson",
+      "Crispin Glover"
+    ],
+    "description": "A teenager accidentally travels thirty years into the past and must make sure his parents still fall in love, or he will vanish."
+  },
+  {
+    "name": "Psycho",
+    "year": 1960,
+    "time": 109,
+    "imdb": 8.5,
+    "votes": 740000,
+    "meta_score": 97,
+    "gross": 32000000,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Horror",
+      "Mystery",
+      "Thriller"
+    ],
+    "directors": [
+      "Alfred Hitchcock"
+    ],
+    "stars": [
+      "Anthony Perkins",
+      "Janet Leigh",
+      "Vera Miles",
+      "John Gavin"
+    ],
+    "description": "A secretary on the run with stolen money checks into a lonely motel run by a shy young man and his unseen mother."
+  },
+  {
+    "name": "The Lion King",
+    "year": 1994,
+    "time": 88,
+    "imdb": 8.5,
+    "votes": 1100000,
+    "meta_score": 88,
+    "gross": 422783777,
+    "price": "7.99",
+    "certification": "G",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Roger Allers",
+      "Rob Minkoff"
+    ],
+    "stars": [
+      "Matthew Broderick",
+      "Jeremy Irons",
+      "James Earl Jones",
+      "Whoopi Goldberg"
+    ],
+    "description": "A lion cub flees his kingdom after his father's death and must one day return to claim his place from a treacherous uncle."
+  },
+  {
+    "name": "Gladiator",
+    "year": 2000,
+    "time": 155,
+    "imdb": 8.5,
+    "votes": 1700000,
+    "meta_score": 67,
+    "gross": 187705427,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Ridley Scott"
+    ],
+    "stars": [
+      "Russell Crowe",
+      "Joaquin Phoenix",
+      "Connie Nielsen",
+      "Oliver Reed"
+    ],
+    "description": "A betrayed Roman general is sold into slavery and fights his way through the arena toward revenge on the emperor."
+  },
+  {
+    "name": "The Departed",
+    "year": 2006,
+    "time": 151,
+    "imdb": 8.5,
+    "votes": 1400000,
+    "meta_score": 85,
+    "gross": 132384315,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "directors": [
+      "Martin Scorsese"
+    ],
+    "stars": [
+      "Leonardo DiCaprio",
+      "Matt Damon",
+      "Jack Nicholson",
+      "Mark Wahlberg"
+    ],
+    "description": "An undercover cop inside a Boston gang and a gang mole inside the police race to expose each other."
+  },
+  {
+    "name": "The Prestige",
+    "year": 2006,
+    "time": 130,
+    "imdb": 8.5,
+    "votes": 1500000,
+    "meta_score": 66,
+    "gross": 53089891,
+    "price": "12.99",
+    "certification": "PG-13",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "stars": [
+      "Christian Bale",
+      "Hugh Jackman",
+      "Scarlett Johansson",
+      "Michael Caine"
+    ],
+    "description": "Two rival magicians in Victorian London sacrifice everything to outdo each other's greatest illusion."
+  },
+  {
+    "name": "Whiplash",
+    "year": 2014,
+    "time": 106,
+    "imdb": 8.5,
+    "votes": 1000000,
+    "meta_score": 89,
+    "gross": 13092000,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Music"
+    ],
+    "directors": [
+      "Damien Chazelle"
+    ],
+    "stars": [
+      "Miles Teller",
+      "J.K. Simmons",
+      "Melissa Benoist",
+      "Paul Reiser"
+    ],
+    "description": "A young jazz drummer at an elite conservatory is pushed to his breaking point by a ruthless instructor."
+  },
+  {
+    "name": "The Usual Suspects",
+    "year": 1995,
+    "time": 106,
+    "imdb": 8.5,
+    "votes": 1200000,
+    "meta_score": 77,
+    "gross": 23341568,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "directors": [
+      "Bryan Singer"
+    ],
+    "stars": [
+      "Kevin Spacey",
+      "Gabriel Byrne",
+      "Chazz Palminteri",
+      "Stephen Baldwin"
+    ],
+    "description": "The only survivor of a deadly heist tells police how five criminals were brought together by a mysterious crime lord."
+  },
+  {
+    "name": "Casablanca",
+    "year": 1942,
+    "time": 102,
+    "imdb": 8.5,
+    "votes": 600000,
+    "meta_score": 100,
+    "gross": 1024560,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Drama",
+      "Romance",
+      "War"
+    ],
+    "directors": [
+      "Michael Curtiz"
+    ],
+    "stars": [
+      "Humphrey Bogart",
+      "Ingrid Bergman",
+      "Paul Henreid",
+      "Claude Rains"
+    ],
+    "description": "A cynical nightclub owner in wartime Morocco must decide whether to help his former love and her husband escape the Nazis."
+  },
+  {
+    "name": "Alien",
+    "year": 1979,
+    "time": 117,
+    "imdb": 8.5,
+    "votes": 950000,
+    "meta_score": 89,
+    "gross": 78900000,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Horror",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Ridley Scott"
+    ],
+    "stars": [
+      "Sigourney Weaver",
+      "Tom Skerritt",
+      "John Hurt",
+      "Veronica Cartwright"
+    ],
+    "description": "The crew of a cargo spaceship answers a distress call and brings back a deadly creature that hunts them one by one."
+  },
+  {
+    "name": "Apocalypse Now",
+    "year": 1979,
+    "time": 147,
+    "imdb": 8.4,
+    "votes": 700000,
+    "meta_score": 94,
+    "gross": 83471511,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "War"
+    ],
+    "directors": [
+      "Francis Ford Coppola"
+    ],
+    "stars": [
+      "Martin Sheen",
+      "Marlon Brando",
+      "Robert Duvall",
+      "Frederic Forrest"
+    ],
+    "description": "During the Vietnam War, an army captain travels upriver into Cambodia on a secret mission to find and kill a rogue colonel."
+  },
+  {
+    "name": "Rear Window",
+    "year": 1954,
+    "time": 112,
+    "imdb": 8.5,
+    "votes": 520000,
+    "meta_score": 100,
+    "gross": 36764313,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Mystery",
+      "Thriller"
+    ],
+    "directors": [
+      "Alfred Hitchcock"
+    ],
+    "stars": [
+      "James Stewart",
+      "Grace Kelly",
+      "Wendell Corey",
+      "Thelma Ritter"
+    ],
+    "description": "A photographer stuck at home with a broken leg watches his neighbors through the window and becomes convinced one of them committed murder."
+  },
+  {
+    "name": "Django Unchained",
+    "year": 2012,
+    "time": 165,
+    "imdb": 8.5,
+    "votes": 1700000,
+    "meta_score": 81,
+    "gross": 162805434,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Western"
+    ],
+    "directors": [
+      "Quentin Tarantino"
+    ],
+    "stars": [
+      "Jamie Foxx",
+      "Christoph Waltz",
+      "Leonardo DiCaprio",
+      "Kerry Washington"
+    ],
+    "description": "A freed slave teams up with a German bounty hunter to rescue his wife from a cruel Mississippi plantation owner."
+  },
+  {
+    "name": "Raiders of the Lost Ark",
+    "year": 1981,
+    "time": 115,
+    "imdb": 8.4,
+    "votes": 1000000,
+    "meta_score": 85,
+    "gross": 248159971,
+    "price": "7.99",
+    "certification": "PG",
+    "genres": [
+      "Action",
+      "Adventure"
+    ],
+    "directors": [
+      "Steven Spielberg"
+    ],
+    "stars": [
+      "Harrison Ford",
+      "Karen Allen",
+      "Paul Freeman",
+      "John Rhys-Davies"
+    ],
+    "description": "An archaeologist and adventurer races the Nazis across the globe to find the lost Ark of the Covenant."
+  },
+  {
+    "name": "WALL-E",
+    "year": 2008,
+    "time": 98,
+    "imdb": 8.4,
+    "votes": 1200000,
+    "meta_score": 95,
+    "gross": 223808164,
+    "price": "12.99",
+    "certification": "G",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Family"
+    ],
+    "directors": [
+      "Andrew Stanton"
+    ],
+    "stars": [
+      "Ben Burtt",
+      "Elissa Knight",
+      "Jeff Garlin",
+      "Fred Willard"
+    ],
+    "description": "A lonely trash-compacting robot left on an abandoned Earth falls for a sleek probe robot and follows her into space."
+  },
+  {
+    "name": "The Shining",
+    "year": 1980,
+    "time": 146,
+    "imdb": 8.4,
+    "votes": 1100000,
+    "meta_score": 68,
+    "gross": 44017374,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Horror"
+    ],
+    "directors": [
+      "Stanley Kubrick"
+    ],
+    "stars": [
+      "Jack Nicholson",
+      "Shelley Duvall",
+      "Danny Lloyd",
+      "Scatman Crothers"
+    ],
+    "description": "A writer takes a winter caretaker job at an isolated mountain hotel, where something begins to drive him toward violence against his family."
+  },
+  {
+    "name": "Avengers: Infinity War",
+    "year": 2018,
+    "time": 149,
+    "imdb": 8.4,
+    "votes": 1200000,
+    "meta_score": 68,
+    "gross": 678815482,
+    "price": "14.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Anthony Russo",
+      "Joe Russo"
+    ],
+    "stars": [
+      "Robert Downey Jr.",
+      "Chris Hemsworth",
+      "Mark Ruffalo",
+      "Chris Evans"
+    ],
+    "description": "Earth's heroes and their allies join forces to stop a powerful warlord from collecting six stones that would let him wipe out half of all life."
+  },
+  {
+    "name": "Avengers: Endgame",
+    "year": 2019,
+    "time": 181,
+    "imdb": 8.4,
+    "votes": 1300000,
+    "meta_score": 78,
+    "gross": 858373000,
+    "price": "14.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Anthony Russo",
+      "Joe Russo"
+    ],
+    "stars": [
+      "Robert Downey Jr.",
+      "Chris Evans",
+      "Mark Ruffalo",
+      "Chris Hemsworth"
+    ],
+    "description": "After a devastating defeat, the surviving heroes attempt one last, risky plan to undo the damage and bring back the ones they lost."
+  },
+  {
+    "name": "Joker",
+    "year": 2019,
+    "time": 122,
+    "imdb": 8.4,
+    "votes": 1500000,
+    "meta_score": 59,
+    "gross": 335451311,
+    "price": "14.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "directors": [
+      "Todd Phillips"
+    ],
+    "stars": [
+      "Joaquin Phoenix",
+      "Robert De Niro",
+      "Zazie Beetz",
+      "Frances Conroy"
+    ],
+    "description": "A struggling party clown and aspiring comedian in a decaying Gotham City slides into madness and violence."
+  },
+  {
+    "name": "Spider-Man: Into the Spider-Verse",
+    "year": 2018,
+    "time": 117,
+    "imdb": 8.4,
+    "votes": 650000,
+    "meta_score": 87,
+    "gross": 190241310,
+    "price": "14.99",
+    "certification": "PG",
+    "genres": [
+      "Animation",
+      "Action",
+      "Adventure"
+    ],
+    "directors": [
+      "Bob Persichetti",
+      "Peter Ramsey",
+      "Rodney Rothman"
+    ],
+    "stars": [
+      "Shameik Moore",
+      "Jake Johnson",
+      "Hailee Steinfeld",
+      "Mahershala Ali"
+    ],
+    "description": "A Brooklyn teenager gains spider powers and teams up with spider-heroes from other dimensions to save every version of reality."
+  },
+  {
+    "name": "The Dark Knight Rises",
+    "year": 2012,
+    "time": 164,
+    "imdb": 8.4,
+    "votes": 1800000,
+    "meta_score": 78,
+    "gross": 448139099,
+    "price": "12.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Drama"
+    ],
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "stars": [
+      "Christian Bale",
+      "Tom Hardy",
+      "Anne Hathaway",
+      "Gary Oldman"
+    ],
+    "description": "Eight years after disappearing, Batman returns to defend Gotham from a masked revolutionary who plans to destroy the city."
+  },
+  {
+    "name": "Toy Story",
+    "year": 1995,
+    "time": 81,
+    "imdb": 8.3,
+    "votes": 1100000,
+    "meta_score": 96,
+    "gross": 191796233,
+    "price": "9.99",
+    "certification": "G",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Comedy"
+    ],
+    "directors": [
+      "John Lasseter"
+    ],
+    "stars": [
+      "Tom Hanks",
+      "Tim Allen",
+      "Don Rickles",
+      "Jim Varney"
+    ],
+    "description": "A cowboy doll who has always been a boy's favorite toy feels threatened when a flashy space ranger action figure arrives."
+  },
+  {
+    "name": "Toy Story 3",
+    "year": 2010,
+    "time": 103,
+    "imdb": 8.3,
+    "votes": 900000,
+    "meta_score": 92,
+    "gross": 415004880,
+    "price": "12.99",
+    "certification": "G",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Comedy"
+    ],
+    "directors": [
+      "Lee Unkrich"
+    ],
+    "stars": [
+      "Tom Hanks",
+      "Tim Allen",
+      "Joan Cusack",
+      "Ned Beatty"
+    ],
+    "description": "As their owner leaves for college, the toys end up at a daycare center that is far less friendly than it first seems."
+  },
+  {
+    "name": "Coco",
+    "year": 2017,
+    "time": 105,
+    "imdb": 8.4,
+    "votes": 600000,
+    "meta_score": 81,
+    "gross": 209726015,
+    "price": "14.99",
+    "certification": "PG",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Lee Unkrich",
+      "Adrian Molina"
+    ],
+    "stars": [
+      "Anthony Gonzalez",
+      "Gael Garcia Bernal",
+      "Benjamin Bratt",
+      "Alanna Ubach"
+    ],
+    "description": "A boy who dreams of becoming a musician, against his family's wishes, finds himself in the colorful Land of the Dead."
+  },
+  {
+    "name": "Up",
+    "year": 2009,
+    "time": 96,
+    "imdb": 8.3,
+    "votes": 1100000,
+    "meta_score": 88,
+    "gross": 293004164,
+    "price": "12.99",
+    "certification": "PG",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Comedy"
+    ],
+    "directors": [
+      "Pete Docter",
+      "Bob Peterson"
+    ],
+    "stars": [
+      "Edward Asner",
+      "Jordan Nagai",
+      "John Ratzenberger",
+      "Christopher Plummer"
+    ],
+    "description": "An elderly widower ties thousands of balloons to his house to fly to South America, not realizing a young scout has come along."
+  },
+  {
+    "name": "American Beauty",
+    "year": 1999,
+    "time": 122,
+    "imdb": 8.3,
+    "votes": 1200000,
+    "meta_score": 84,
+    "gross": 130096601,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Drama"
+    ],
+    "directors": [
+      "Sam Mendes"
+    ],
+    "stars": [
+      "Kevin Spacey",
+      "Annette Bening",
+      "Thora Birch",
+      "Wes Bentley"
+    ],
+    "description": "A suburban father in the middle of a crisis upends his dull life, with consequences for everyone around him."
+  },
+  {
+    "name": "Braveheart",
+    "year": 1995,
+    "time": 178,
+    "imdb": 8.3,
+    "votes": 1100000,
+    "meta_score": 68,
+    "gross": 75600000,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Biography",
+      "Drama",
+      "History"
+    ],
+    "directors": [
+      "Mel Gibson"
+    ],
+    "stars": [
+      "Mel Gibson",
+      "Sophie Marceau",
+      "Patrick McGoohan",
+      "Angus Macfadyen"
+    ],
+    "description": "A Scottish commoner leads an uprising against the English king after a personal tragedy in the 13th century."
+  },
+  {
+    "name": "Good Will Hunting",
+    "year": 1997,
+    "time": 126,
+    "imdb": 8.3,
+    "votes": 1100000,
+    "meta_score": 70,
+    "gross": 138433435,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Romance"
+    ],
+    "directors": [
+      "Gus Van Sant"
+    ],
+    "stars": [
+      "Robin Williams",
+      "Matt Damon",
+      "Ben Affleck",
+      "Stellan Skarsgard"
+    ],
+    "description": "A troubled young janitor with a genius for mathematics begins therapy with a grieving professor who refuses to give up on him."
+  },
+  {
+    "name": "Reservoir Dogs",
+    "year": 1992,
+    "time": 99,
+    "imdb": 8.3,
+    "votes": 1100000,
+    "meta_score": 79,
+    "gross": 2832029,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Thriller"
+    ],
+    "directors": [
+      "Quentin Tarantino"
+    ],
+    "stars": [
+      "Harvey Keitel",
+      "Tim Roth",
+      "Michael Madsen",
+      "Steve Buscemi"
+    ],
+    "description": "After a jewelry heist goes wrong, the surviving robbers regroup at a warehouse and suspect that one of them is a police informant."
+  },
+  {
+    "name": "Requiem for a Dream",
+    "year": 2000,
+    "time": 102,
+    "imdb": 8.3,
+    "votes": 900000,
+    "meta_score": 71,
+    "gross": 3635482,
+    "price": "9.99",
+    "certification": "Not Rated",
+    "genres": [
+      "Drama"
+    ],
+    "directors": [
+      "Darren Aronofsky"
+    ],
+    "stars": [
+      "Ellen Burstyn",
+      "Jared Leto",
+      "Jennifer Connelly",
+      "Marlon Wayans"
+    ],
+    "description": "A lonely widow and her son, along with his girlfriend and best friend, each spiral into addiction as their dreams fall apart."
+  },
+  {
+    "name": "Eternal Sunshine of the Spotless Mind",
+    "year": 2004,
+    "time": 108,
+    "imdb": 8.3,
+    "votes": 1100000,
+    "meta_score": 89,
+    "gross": 34400301,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Romance",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Michel Gondry"
+    ],
+    "stars": [
+      "Jim Carrey",
+      "Kate Winslet",
+      "Tom Wilkinson",
+      "Gerry Robert Byrne"
+    ],
+    "description": "After a painful breakup, a man undergoes a procedure to erase every memory of his former girlfriend, then fights to keep them."
+  },
+  {
+    "name": "2001: A Space Odyssey",
+    "year": 1968,
+    "time": 149,
+    "imdb": 8.3,
+    "votes": 700000,
+    "meta_score": 84,
+    "gross": 56954992,
+    "price": "5.99",
+    "certification": "G",
+    "genres": [
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Stanley Kubrick"
+    ],
+    "stars": [
+      "Keir Dullea",
+      "Gary Lockwood",
+      "William Sylvester",
+      "Daniel Richter"
+    ],
+    "description": "A mysterious black monolith guides human evolution, and a mission to Jupiter is put at risk by the ship's calm, all-seeing computer."
+  },
+  {
+    "name": "Full Metal Jacket",
+    "year": 1987,
+    "time": 116,
+    "imdb": 8.3,
+    "votes": 800000,
+    "meta_score": 78,
+    "gross": 46357676,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "War"
+    ],
+    "directors": [
+      "Stanley Kubrick"
+    ],
+    "stars": [
+      "Matthew Modine",
+      "R. Lee Ermey",
+      "Vincent D'Onofrio",
+      "Adam Baldwin"
+    ],
+    "description": "Marine recruits survive a merciless drill instructor in boot camp, then face the chaos of combat in Vietnam."
+  },
+  {
+    "name": "Inglourious Basterds",
+    "year": 2009,
+    "time": 153,
+    "imdb": 8.4,
+    "votes": 1600000,
+    "meta_score": 69,
+    "gross": 120540719,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Adventure",
+      "Drama",
+      "War"
+    ],
+    "directors": [
+      "Quentin Tarantino"
+    ],
+    "stars": [
+      "Brad Pitt",
+      "Diane Kruger",
+      "Eli Roth",
+      "Melanie Laurent"
+    ],
+    "description": "In occupied France, a squad of Jewish-American soldiers and a young cinema owner separately plot to bring down the Nazi leadership."
+  },
+  {
+    "name": "Heat",
+    "year": 1995,
+    "time": 170,
+    "imdb": 8.3,
+    "votes": 750000,
+    "meta_score": 76,
+    "gross": 67436818,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Michael Mann"
+    ],
+    "stars": [
+      "Al Pacino",
+      "Robert De Niro",
+      "Val Kilmer",
+      "Jon Voight"
+    ],
+    "description": "A dedicated Los Angeles detective closes in on a disciplined crew of professional thieves planning one last big score."
+  },
+  {
+    "name": "Scarface",
+    "year": 1983,
+    "time": 170,
+    "imdb": 8.3,
+    "votes": 900000,
+    "meta_score": 65,
+    "gross": 45598982,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Brian De Palma"
+    ],
+    "stars": [
+      "Al Pacino",
+      "Michelle Pfeiffer",
+      "Steven Bauer",
+      "Mary Elizabeth Mastrantonio"
+    ],
+    "description": "A Cuban refugee claws his way to the top of the Miami cocaine trade, only to be consumed by greed and paranoia."
+  },
+  {
+    "name": "Taxi Driver",
+    "year": 1976,
+    "time": 114,
+    "imdb": 8.2,
+    "votes": 950000,
+    "meta_score": 94,
+    "gross": 28262574,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Martin Scorsese"
+    ],
+    "stars": [
+      "Robert De Niro",
+      "Jodie Foster",
+      "Cybill Shepherd",
+      "Albert Brooks"
+    ],
+    "description": "An isolated Vietnam veteran working night shifts as a New York cab driver grows obsessed with cleaning up the city by force."
+  },
+  {
+    "name": "The Sting",
+    "year": 1973,
+    "time": 129,
+    "imdb": 8.3,
+    "votes": 280000,
+    "meta_score": 83,
+    "gross": 159616327,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Comedy",
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "George Roy Hill"
+    ],
+    "stars": [
+      "Paul Newman",
+      "Robert Redford",
+      "Robert Shaw",
+      "Charles Durning"
+    ],
+    "description": "Two con men in 1930s Chicago set up an elaborate swindle to take revenge on a powerful mob boss."
+  },
+  {
+    "name": "Singin' in the Rain",
+    "year": 1952,
+    "time": 103,
+    "imdb": 8.3,
+    "votes": 260000,
+    "meta_score": 99,
+    "gross": 8819028,
+    "price": "5.99",
+    "certification": "G",
+    "genres": [
+      "Comedy",
+      "Musical",
+      "Romance"
+    ],
+    "directors": [
+      "Stanley Donen",
+      "Gene Kelly"
+    ],
+    "stars": [
+      "Gene Kelly",
+      "Donald O'Connor",
+      "Debbie Reynolds",
+      "Jean Hagen"
+    ],
+    "description": "A silent film star and his friends scramble to turn their latest picture into a musical as Hollywood switches to sound."
+  },
+  {
+    "name": "Citizen Kane",
+    "year": 1941,
+    "time": 119,
+    "imdb": 8.3,
+    "votes": 470000,
+    "meta_score": 100,
+    "gross": 1585634,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Drama",
+      "Mystery"
+    ],
+    "directors": [
+      "Orson Welles"
+    ],
+    "stars": [
+      "Orson Welles",
+      "Joseph Cotten",
+      "Dorothy Comingore",
+      "Agnes Moorehead"
+    ],
+    "description": "Reporters try to uncover the meaning of a newspaper tycoon's dying word by piecing together his rise and lonely fall."
+  },
+  {
+    "name": "North by Northwest",
+    "year": 1959,
+    "time": 136,
+    "imdb": 8.3,
+    "votes": 350000,
+    "meta_score": 98,
+    "gross": 13275000,
+    "price": "5.99",
+    "certification": "Approved",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Mystery"
+    ],
+    "directors": [
+      "Alfred Hitchcock"
+    ],
+    "stars": [
+      "Cary Grant",
+      "Eva Marie Saint",
+      "James Mason",
+      "Jessie Royce Landis"
+    ],
+    "description": "A Manhattan advertising man mistaken for a government agent is chased across the country by spies."
+  },
+  {
+    "name": "Vertigo",
+    "year": 1958,
+    "time": 128,
+    "imdb": 8.2,
+    "votes": 430000,
+    "meta_score": 100,
+    "gross": 3200000,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Mystery",
+      "Romance",
+      "Thriller"
+    ],
+    "directors": [
+      "Alfred Hitchcock"
+    ],
+    "stars": [
+      "James Stewart",
+      "Kim Novak",
+      "Barbara Bel Geddes",
+      "Tom Helmore"
+    ],
+    "description": "A retired San Francisco detective with a fear of heights is hired to follow a friend's wife and becomes dangerously obsessed with her."
+  },
+  {
+    "name": "Some Like It Hot",
+    "year": 1959,
+    "time": 121,
+    "imdb": 8.2,
+    "votes": 280000,
+    "meta_score": 98,
+    "gross": 25000000,
+    "price": "5.99",
+    "certification": "Passed",
+    "genres": [
+      "Comedy",
+      "Music",
+      "Romance"
+    ],
+    "directors": [
+      "Billy Wilder"
+    ],
+    "stars": [
+      "Marilyn Monroe",
+      "Tony Curtis",
+      "Jack Lemmon",
+      "George Raft"
+    ],
+    "description": "Two musicians who witness a gangland killing disguise themselves as women and join an all-female band heading to Florida."
+  },
+  {
+    "name": "The Apartment",
+    "year": 1960,
+    "time": 125,
+    "imdb": 8.3,
+    "votes": 200000,
+    "meta_score": 94,
+    "gross": 18600000,
+    "price": "5.99",
+    "certification": "Approved",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Romance"
+    ],
+    "directors": [
+      "Billy Wilder"
+    ],
+    "stars": [
+      "Jack Lemmon",
+      "Shirley MacLaine",
+      "Fred MacMurray",
+      "Ray Walston"
+    ],
+    "description": "An ambitious insurance clerk lends his apartment to his bosses for their affairs, until he falls for the elevator operator one of them is seeing."
+  },
+  {
+    "name": "Sunset Boulevard",
+    "year": 1950,
+    "time": 110,
+    "imdb": 8.4,
+    "votes": 250000,
+    "meta_score": 94,
+    "gross": null,
+    "price": "5.99",
+    "certification": "Passed",
+    "genres": [
+      "Drama",
+      "Film-Noir"
+    ],
+    "directors": [
+      "Billy Wilder"
+    ],
+    "stars": [
+      "William Holden",
+      "Gloria Swanson",
+      "Erich von Stroheim",
+      "Nancy Olson"
+    ],
+    "description": "A struggling screenwriter becomes entangled with a faded silent film star who dreams of a triumphant return to the screen."
+  },
+  {
+    "name": "Double Indemnity",
+    "year": 1944,
+    "time": 107,
+    "imdb": 8.3,
+    "votes": 170000,
+    "meta_score": 95,
+    "gross": null,
+    "price": "5.99",
+    "certification": "Passed",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Film-Noir"
+    ],
+    "directors": [
+      "Billy Wilder"
+    ],
+    "stars": [
+      "Fred MacMurray",
+      "Barbara Stanwyck",
+      "Edward G. Robinson",
+      "Byron Barr"
+    ],
+    "description": "An insurance salesman is drawn by a seductive housewife into a plan to murder her husband and collect on his policy."
+  },
+  {
+    "name": "To Kill a Mockingbird",
+    "year": 1962,
+    "time": 129,
+    "imdb": 8.2,
+    "votes": 330000,
+    "meta_score": 88,
+    "gross": null,
+    "price": "5.99",
+    "certification": "Approved",
+    "genres": [
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Robert Mulligan"
+    ],
+    "stars": [
+      "Gregory Peck",
+      "John Megna",
+      "Frank Overton",
+      "Rosemary Murphy"
+    ],
+    "description": "In a Depression-era Southern town, a lawyer defends a Black man falsely accused of a crime, seen through the eyes of his young daughter."
+  },
+  {
+    "name": "The Wizard of Oz",
+    "year": 1939,
+    "time": 102,
+    "imdb": 8.1,
+    "votes": 430000,
+    "meta_score": 92,
+    "gross": 2076020,
+    "price": "5.99",
+    "certification": "G",
+    "genres": [
+      "Adventure",
+      "Family",
+      "Fantasy"
+    ],
+    "directors": [
+      "Victor Fleming"
+    ],
+    "stars": [
+      "Judy Garland",
+      "Frank Morgan",
+      "Ray Bolger",
+      "Bert Lahr"
+    ],
+    "description": "A Kansas farm girl is swept away by a tornado to a magical land and follows a yellow brick road in search of a way home."
+  },
+  {
+    "name": "Chinatown",
+    "year": 1974,
+    "time": 130,
+    "imdb": 8.1,
+    "votes": 350000,
+    "meta_score": 92,
+    "gross": 29200000,
+    "price": "5.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ],
+    "directors": [
+      "Roman Polanski"
+    ],
+    "stars": [
+      "Jack Nicholson",
+      "Faye Dunaway",
+      "John Huston",
+      "Perry Lopez"
+    ],
+    "description": "A private detective in 1930s Los Angeles takes a routine case that leads him into a web of murder, water rights and family secrets."
+  },
+  {
+    "name": "Jaws",
+    "year": 1975,
+    "time": 124,
+    "imdb": 8.1,
+    "votes": 650000,
+    "meta_score": 87,
+    "gross": 260000000,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Adventure",
+      "Thriller"
+    ],
+    "directors": [
+      "Steven Spielberg"
+    ],
+    "stars": [
+      "Roy Scheider",
+      "Robert Shaw",
+      "Richard Dreyfuss",
+      "Lorraine Gary"
+    ],
+    "description": "When a great white shark attacks swimmers at a summer resort town, the police chief, a marine scientist and a fisherman set out to hunt it."
+  },
+  {
+    "name": "Rocky",
+    "year": 1976,
+    "time": 120,
+    "imdb": 8.1,
+    "votes": 640000,
+    "meta_score": 70,
+    "gross": 117235247,
+    "price": "5.99",
+    "certification": "PG",
+    "genres": [
+      "Drama",
+      "Sport"
+    ],
+    "directors": [
+      "John G. Avildsen"
+    ],
+    "stars": [
+      "Sylvester Stallone",
+      "Talia Shire",
+      "Burt Young",
+      "Carl Weathers"
+    ],
+    "description": "A small-time Philadelphia boxer gets a once-in-a-lifetime shot at the world heavyweight title."
+  },
+  {
+    "name": "The Terminator",
+    "year": 1984,
+    "time": 107,
+    "imdb": 8.1,
+    "votes": 950000,
+    "meta_score": 84,
+    "gross": 38400000,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "James Cameron"
+    ],
+    "stars": [
+      "Arnold Schwarzenegger",
+      "Linda Hamilton",
+      "Michael Biehn",
+      "Paul Winfield"
+    ],
+    "description": "A cyborg assassin is sent back from the future to kill a waitress whose unborn son will lead humanity's resistance."
+  },
+  {
+    "name": "Aliens",
+    "year": 1986,
+    "time": 137,
+    "imdb": 8.4,
+    "votes": 780000,
+    "meta_score": 84,
+    "gross": 85160248,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "James Cameron"
+    ],
+    "stars": [
+      "Sigourney Weaver",
+      "Michael Biehn",
+      "Carrie Henn",
+      "Paul Reiser"
+    ],
+    "description": "Decades after her first encounter, Ripley returns with a team of marines to a colony that has gone silent."
+  },
+  {
+    "name": "Die Hard",
+    "year": 1988,
+    "time": 132,
+    "imdb": 8.2,
+    "votes": 950000,
+    "meta_score": 72,
+    "gross": 83008852,
+    "price": "7.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Thriller"
+    ],
+    "directors": [
+      "John McTiernan"
+    ],
+    "stars": [
+      "Bruce Willis",
+      "Alan Rickman",
+      "Bonnie Bedelia",
+      "Reginald VelJohnson"
+    ],
+    "description": "An off-duty New York cop is trapped in a Los Angeles skyscraper on Christmas Eve when armed robbers take everyone hostage."
+  },
+  {
+    "name": "The Truman Show",
+    "year": 1998,
+    "time": 103,
+    "imdb": 8.2,
+    "votes": 1200000,
+    "meta_score": 90,
+    "gross": 125618201,
+    "price": "9.99",
+    "certification": "PG",
+    "genres": [
+      "Comedy",
+      "Drama"
+    ],
+    "directors": [
+      "Peter Weir"
+    ],
+    "stars": [
+      "Jim Carrey",
+      "Ed Harris",
+      "Laura Linney",
+      "Noah Emmerich"
+    ],
+    "description": "An insurance salesman slowly realizes that his entire life has been staged as a television show watched by the world."
+  },
+  {
+    "name": "Jurassic Park",
+    "year": 1993,
+    "time": 127,
+    "imdb": 8.2,
+    "votes": 1100000,
+    "meta_score": 68,
+    "gross": 402453882,
+    "price": "7.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "Steven Spielberg"
+    ],
+    "stars": [
+      "Sam Neill",
+      "Laura Dern",
+      "Jeff Goldblum",
+      "Richard Attenborough"
+    ],
+    "description": "A group of visitors tours an island theme park of cloned dinosaurs just as its security systems break down."
+  },
+  {
+    "name": "No Country for Old Men",
+    "year": 2007,
+    "time": 122,
+    "imdb": 8.2,
+    "votes": 1100000,
+    "meta_score": 92,
+    "gross": 74283625,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "directors": [
+      "Ethan Coen",
+      "Joel Coen"
+    ],
+    "stars": [
+      "Tommy Lee Jones",
+      "Javier Bardem",
+      "Josh Brolin",
+      "Woody Harrelson"
+    ],
+    "description": "A hunter who takes a bag of drug money from a desert massacre is pursued by a relentless killer, with an aging sheriff trailing both."
+  },
+  {
+    "name": "Fargo",
+    "year": 1996,
+    "time": 98,
+    "imdb": 8.1,
+    "votes": 730000,
+    "meta_score": 88,
+    "gross": 24611975,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Thriller"
+    ],
+    "directors": [
+      "Joel Coen"
+    ],
+    "stars": [
+      "Frances McDormand",
+      "William H. Macy",
+      "Steve Buscemi",
+      "Peter Stormare"
+    ],
+    "description": "A debt-ridden car salesman arranges his wife's kidnapping, and a pregnant small-town police chief follows the bloody trail."
+  },
+  {
+    "name": "The Big Lebowski",
+    "year": 1998,
+    "time": 117,
+    "imdb": 8.1,
+    "votes": 850000,
+    "meta_score": 71,
+    "gross": 17498804,
+    "price": "9.99",
+    "certification": "R",
+    "genres": [
+      "Comedy",
+      "Crime"
+    ],
+    "directors": [
+      "Joel Coen"
+    ],
+    "stars": [
+      "Jeff Bridges",
+      "John Goodman",
+      "Julianne Moore",
+      "Steve Buscemi"
+    ],
+    "description": "A laid-back Los Angeles bowler is mistaken for a millionaire with the same name and dragged into a kidnapping scheme."
+  },
+  {
+    "name": "There Will Be Blood",
+    "year": 2007,
+    "time": 158,
+    "imdb": 8.2,
+    "votes": 650000,
+    "meta_score": 93,
+    "gross": 40222514,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Drama"
+    ],
+    "directors": [
+      "Paul Thomas Anderson"
+    ],
+    "stars": [
+      "Daniel Day-Lewis",
+      "Paul Dano",
+      "Ciaran Hinds",
+      "Martin Stringer"
+    ],
+    "description": "A ruthless oilman builds an empire in early 20th-century California and clashes with a young preacher."
+  },
+  {
+    "name": "The Wolf of Wall Street",
+    "year": 2013,
+    "time": 180,
+    "imdb": 8.2,
+    "votes": 1600000,
+    "meta_score": 75,
+    "gross": 116900694,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Biography",
+      "Comedy",
+      "Crime"
+    ],
+    "directors": [
+      "Martin Scorsese"
+    ],
+    "stars": [
+      "Leonardo DiCaprio",
+      "Jonah Hill",
+      "Margot Robbie",
+      "Matthew McConaughey"
+    ],
+    "description": "A New York stockbroker rises to enormous wealth through fraud and excess, until federal agents close in."
+  },
+  {
+    "name": "Shutter Island",
+    "year": 2010,
+    "time": 138,
+    "imdb": 8.2,
+    "votes": 1500000,
+    "meta_score": 63,
+    "gross": 128012934,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Mystery",
+      "Thriller"
+    ],
+    "directors": [
+      "Martin Scorsese"
+    ],
+    "stars": [
+      "Leonardo DiCaprio",
+      "Emily Mortimer",
+      "Mark Ruffalo",
+      "Ben Kingsley"
+    ],
+    "description": "In 1954, two U.S. marshals investigate the disappearance of a patient from an island hospital for the criminally insane."
+  },
+  {
+    "name": "Catch Me If You Can",
+    "year": 2002,
+    "time": 141,
+    "imdb": 8.1,
+    "votes": 1100000,
+    "meta_score": 75,
+    "gross": 164615351,
+    "price": "9.99",
+    "certification": "PG-13",
+    "genres": [
+      "Biography",
+      "Crime",
+      "Drama"
+    ],
+    "directors": [
+      "Steven Spielberg"
+    ],
+    "stars": [
+      "Leonardo DiCaprio",
+      "Tom Hanks",
+      "Christopher Walken",
+      "Martin Sheen"
+    ],
+    "description": "A teenage con artist poses as a pilot, a doctor and a lawyer while forging millions in checks, with a patient FBI agent on his trail."
+  },
+  {
+    "name": "Finding Nemo",
+    "year": 2003,
+    "time": 100,
+    "imdb": 8.2,
+    "votes": 1100000,
+    "meta_score": 90,
+    "gross": 380843261,
+    "price": "9.99",
+    "certification": "G",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Comedy"
+    ],
+    "directors": [
+      "Andrew Stanton",
+      "Lee Unkrich"
+    ],
+    "stars": [
+      "Albert Brooks",
+      "Ellen DeGeneres",
+      "Alexander Gould",
+      "Willem Dafoe"
+    ],
+    "description": "An overprotective clownfish crosses the ocean, with a forgetful blue tang at his side, to find his son who was taken by a diver."
+  },
+  {
+    "name": "Inside Out",
+    "year": 2015,
+    "time": 95,
+    "imdb": 8.1,
+    "votes": 800000,
+    "meta_score": 94,
+    "gross": 356461711,
+    "price": "14.99",
+    "certification": "PG",
+    "genres": [
+      "Animation",
+      "Adventure",
+      "Comedy"
+    ],
+    "directors": [
+      "Pete Docter",
+      "Ronnie Del Carmen"
+    ],
+    "stars": [
+      "Amy Poehler",
+      "Bill Hader",
+      "Lewis Black",
+      "Mindy Kaling"
+    ],
+    "description": "The emotions inside an 11-year-old girl's mind struggle to guide her through a difficult move to a new city."
+  },
+  {
+    "name": "Mad Max: Fury Road",
+    "year": 2015,
+    "time": 120,
+    "imdb": 8.1,
+    "votes": 1100000,
+    "meta_score": 90,
+    "gross": 154058340,
+    "price": "14.99",
+    "certification": "R",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Sci-Fi"
+    ],
+    "directors": [
+      "George Miller"
+    ],
+    "stars": [
+      "Tom Hardy",
+      "Charlize Theron",
+      "Nicholas Hoult",
+      "Zoe Kravitz"
+    ],
+    "description": "In a desert wasteland, a drifter and a rebel commander flee a tyrant across the sand in an armored war rig."
+  },
+  {
+    "name": "The Social Network",
+    "year": 2010,
+    "time": 120,
+    "imdb": 7.8,
+    "votes": 800000,
+    "meta_score": 95,
+    "gross": 96962694,
+    "price": "12.99",
+    "certification": "PG-13",
+    "genres": [
+      "Biography",
+      "Drama"
+    ],
+    "directors": [
+      "David Fincher"
+    ],
+    "stars": [
+      "Jesse Eisenberg",
+      "Andrew Garfield",
+      "Justin Timberlake",
+      "Rooney Mara"
+    ],
+    "description": "A Harvard student creates a social networking site that makes him a billionaire and costs him his closest friendship."
+  },
+  {
+    "name": "Gone Girl",
+    "year": 2014,
+    "time": 149,
+    "imdb": 8.1,
+    "votes": 1100000,
+    "meta_score": 79,
+    "gross": 167767189,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Drama",
+      "Mystery",
+      "Thriller"
+    ],
+    "directors": [
+      "David Fincher"
+    ],
+    "stars": [
+      "Ben Affleck",
+      "Rosamund Pike",
+      "Neil Patrick Harris",
+      "Tyler Perry"
+    ],
+    "description": "When his wife disappears on their fifth anniversary, a man becomes the prime suspect as the media frenzy grows."
+  },
+  {
+    "name": "Prisoners",
+    "year": 2013,
+    "time": 153,
+    "imdb": 8.1,
+    "votes": 850000,
+    "meta_score": 74,
+    "gross": 61002302,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Crime",
+      "Drama",
+      "Mystery"
+    ],
+    "directors": [
+      "Denis Villeneuve"
+    ],
+    "stars": [
+      "Hugh Jackman",
+      "Jake Gyllenhaal",
+      "Viola Davis",
+      "Maria Bello"
+    ],
+    "description": "When his young daughter and her friend go missing, a desperate father takes matters into his own hands while a detective races for answers."
+  },
+  {
+    "name": "Dune: Part Two",
+    "year": 2024,
+    "time": 166,
+    "imdb": 8.5,
+    "votes": 650000,
+    "meta_score": 79,
+    "gross": 282144358,
+    "price": "14.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Adventure",
+      "Drama"
+    ],
+    "directors": [
+      "Denis Villeneuve"
+    ],
+    "stars": [
+      "Timothee Chalamet",
+      "Zendaya",
+      "Rebecca Ferguson",
+      "Javier Bardem"
+    ],
+    "description": "Paul Atreides joins the desert people of Arrakis to take revenge on the conspirators who destroyed his family."
+  },
+  {
+    "name": "Oppenheimer",
+    "year": 2023,
+    "time": 180,
+    "imdb": 8.3,
+    "votes": 900000,
+    "meta_score": 90,
+    "gross": 330078895,
+    "price": "14.99",
+    "certification": "R",
+    "genres": [
+      "Biography",
+      "Drama",
+      "History"
+    ],
+    "directors": [
+      "Christopher Nolan"
+    ],
+    "stars": [
+      "Cillian Murphy",
+      "Emily Blunt",
+      "Matt Damon",
+      "Robert Downey Jr."
+    ],
+    "description": "The physicist who led the Manhattan Project races to build the atomic bomb, then faces the political fallout of his creation."
+  },
+  {
+    "name": "Top Gun: Maverick",
+    "year": 2022,
+    "time": 130,
+    "imdb": 8.2,
+    "votes": 750000,
+    "meta_score": 78,
+    "gross": 718732821,
+    "price": "14.99",
+    "certification": "PG-13",
+    "genres": [
+      "Action",
+      "Drama"
+    ],
+    "directors": [
+      "Joseph Kosinski"
+    ],
+    "stars": [
+      "Tom Cruise",
+      "Jennifer Connelly",
+      "Miles Teller",
+      "Val Kilmer"
+    ],
+    "description": "Decades after his first mission, a veteran Navy pilot trains a young squad for a dangerous strike, including the son of his late friend."
+  },
+  {
+    "name": "Spider-Man: Across the Spider-Verse",
+    "year": 2023,
+    "time": 140,
+    "imdb": 8.5,
+    "votes": 450000,
+    "meta_score": 86,
+    "gross": 381593754,
+    "price": "14.99",
+    "certification": "PG",
+    "genres": [
+      "Animation",
+      "Action",
+      "Adventure"
+    ],
+    "directors": [
+      "Joaquim Dos Santos",
+      "Kemp Powers",
+      "Justin K. Thompson"
+    ],
+    "stars": [
+      "Shameik Moore",
+      "Hailee Steinfeld",
+      "Brian Tyree Henry",
+      "Luna Lauren Velez"
+    ],
+    "description": "Miles Morales travels across the multiverse and meets a society of Spider-People who disagree with him about how to save his world."
+  },
+  {
+    "name": "The Grand Budapest Hotel",
+    "year": 2014,
+    "time": 99,
+    "imdb": 8.1,
+    "votes": 900000,
+    "meta_score": 88,
+    "gross": 59301324,
+    "price": "12.99",
+    "certification": "R",
+    "genres": [
+      "Adventure",
+      "Comedy",
+      "Crime"
+    ],
+    "directors": [
+      "Wes Anderson"
+    ],
+    "stars": [
+      "Ralph Fiennes",
+      "F. Murray Abraham",
+      "Mathieu Amalric",
+      "Adrien Brody"
+    ],
+    "description": "The legendary concierge of a grand European hotel and his loyal lobby boy are caught up in the theft of a priceless painting."
+  },
+  {
+    "name": "Groundhog Day",
+    "year": 1993,
+    "time": 101,
+    "imdb": 8.0,
+    "votes": 700000,
+    "meta_score": 72,
+    "gross": 70906973,
+    "price": "7.99",
+    "certification": "PG",
+    "genres": [
+      "Comedy",
+      "Drama",
+      "Fantasy"
+    ],
+    "directors": [
+      "Harold Ramis"
+    ],
+    "stars": [
+      "Bill Murray",
+      "Andie MacDowell",
+      "Chris Elliott",
+      "Stephen Tobolowsky"
+    ],
+    "description": "A cynical TV weatherman covering a small-town festival finds himself living the same day over and over again."
+  }
+]
