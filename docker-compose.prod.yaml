@@ -1,0 +1,86 @@
+services:
+  app:
+    image: ghcr.io/omerlenko/online-cinema-api:${IMAGE_TAG:-latest}
+    env_file:
+      .env
+    environment:
+      - POSTGRES_HOST=db
+      - SMTP_HOST=mailpit
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "80:8000"
+    restart: unless-stopped
+
+  db:
+    image: "postgres:18"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB -h 127.0.0.1 || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.10-alpine
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
+  celery-worker:
+    image: ghcr.io/omerlenko/online-cinema-api:${IMAGE_TAG:-latest}
+    entrypoint: [ "celery", "-A", "src.celery_app", "worker", "--loglevel=info", "--concurrency=2" ]
+    env_file:
+      .env
+    environment:
+      - POSTGRES_HOST=db
+      - REDIS_HOST=redis
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    image: ghcr.io/omerlenko/online-cinema-api:${IMAGE_TAG:-latest}
+    entrypoint: [ "celery", "-A", "src.celery_app", "beat", "--loglevel=info", "--schedule=/tmp/celerybeat-schedule" ]
+    env_file:
+      .env
+    environment:
+      - REDIS_HOST=redis
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    environment:
+      - TZ=Europe/Warsaw
+      - MP_DATABASE=/data/mailpit.db
+      - MP_SMTP_AUTH_ACCEPT_ANY=1
+      - MP_SMTP_AUTH_ALLOW_INSECURE=true
+    ports:
+      - "127.0.0.1:8025:8025"
+    volumes:
+      - mailpit_data:/data
+    restart: unless-stopped
+
+
+volumes:
+  pgdata:
+  mailpit_data:
+    driver: local
