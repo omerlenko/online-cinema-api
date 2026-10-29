@@ -566,16 +566,27 @@ async def test_update_movie_with_none_name(
     assert response.json()["name"] == "Test Name", "Movie name was changed"
 
 
-@pytest.mark.parametrize(
-    "field, value",
-    [("year", 1800), ("imdb", 11), ("price", -1), ("time", 0), ("meta_score", 101)],
-)
+INVALID_MOVIE_VALUES = [
+    ("year", 1800),
+    ("year", 2101),
+    ("imdb", 11),
+    ("price", -1),
+    ("price", 123456789012.50),
+    ("price", 99.999),
+    ("time", 0),
+    ("time", 601),
+    ("votes", 2**31),
+    ("meta_score", 101),
+]
+
+
+@pytest.mark.parametrize("field, value", INVALID_MOVIE_VALUES)
 async def test_create_movie_invalid_inputs(
     client: AsyncClient,
     create_user: Callable[..., Awaitable[User]],
     create_unique_name_object: Callable[..., Awaitable[UniqueNameBase]],
     field: str,
-    value: int,
+    value: int | float,
 ):
     moderator = await create_user(is_active=True, user_group=UserGroupEnum.MODERATOR)
     certification = await create_unique_name_object(name="R", model=Certification)
@@ -584,6 +595,24 @@ async def test_create_movie_invalid_inputs(
 
     response = await client.post(
         MOVIES_URL, json=payload, headers=auth_headers(moderator)
+    )
+    assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
+
+
+@pytest.mark.parametrize("field, value", INVALID_MOVIE_VALUES)
+async def test_update_movie_invalid_inputs(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    field: str,
+    value: int | float,
+):
+    moderator = await create_user(is_active=True, user_group=UserGroupEnum.MODERATOR)
+    movie = await create_movie(name="Movie")
+    payload = {field: value}
+
+    response = await client.patch(
+        f"{MOVIES_URL}/{movie.id}", json=payload, headers=auth_headers(moderator)
     )
     assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
 

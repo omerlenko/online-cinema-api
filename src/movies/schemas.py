@@ -11,6 +11,13 @@ Name = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
 ]
 
+Year = Annotated[int, Field(ge=1895, le=2100)]
+Time = Annotated[int, Field(ge=1, le=600)]
+Imdb = Annotated[float, Field(ge=0, le=10)]
+Votes = Annotated[int, Field(ge=0, le=2**31 - 1)]
+MetaScore = Annotated[float, Field(ge=0, le=100)]
+Price = Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)]
+
 
 class NameCreateSchema(BaseModel):
     name: Name
@@ -29,14 +36,14 @@ class GenreWithCountSchema(NameDetailSchema):
 
 class MovieBaseSchema(BaseModel):
     name: Name
-    year: int = Field(ge=1895)
-    time: int = Field(ge=1)
-    imdb: float = Field(ge=0, le=10)
-    votes: int = Field(ge=0)
-    meta_score: float | None = Field(default=None, ge=0, le=100)
+    year: Year
+    time: Time
+    imdb: Imdb
+    votes: Votes
+    meta_score: MetaScore | None = None
     gross: float | None = None
     description: str
-    price: Decimal = Field(ge=0)
+    price: Price
 
 
 class MovieSeedSchema(MovieBaseSchema):
@@ -55,14 +62,14 @@ class MovieCreateSchema(MovieBaseSchema):
 
 class MovieUpdateSchema(BaseModel):
     name: Name | None = None
-    year: int | None = Field(default=None, ge=1895)
-    time: int | None = Field(default=None, ge=1)
-    imdb: float | None = Field(default=None, ge=0, le=10)
-    votes: int | None = Field(default=None, ge=0)
-    meta_score: float | None = Field(default=None, ge=0, le=100)
+    year: Year | None = None
+    time: Time | None = None
+    imdb: Imdb | None = None
+    votes: Votes | None = None
+    meta_score: MetaScore | None = None
     gross: float | None = None
     description: str | None = None
-    price: Decimal | None = Field(default=None, ge=0)
+    price: Price | None = None
 
     certification_id: int | None = None
     genre_ids: list[int] | None = None
