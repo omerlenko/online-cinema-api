@@ -6,7 +6,6 @@ on:
   push:
     branches:
       - main
-      - feature/setup-cd-ec2   # TEMPORARY: remove before opening the PR
 permissions:
   contents: read
 env:
