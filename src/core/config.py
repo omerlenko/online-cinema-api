@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -13,8 +14,8 @@ class Settings(BaseSettings):
 
     SMTP_HOST: str = "localhost"
     SMTP_PORT: int = 1025
-    SMTP_USER: str | None = "admin"
-    SMTP_PASSWORD: str | None = "some_password"
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
     SMTP_USE_TLS: bool = False
     EMAIL_SENDER_ADDRESS: str = "noreply@example.com"
 
@@ -25,7 +26,7 @@ class Settings(BaseSettings):
     PASSWORD_RESET_TOKEN_LIFETIME_MINUTES: int = 15
     EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES: int = 60
 
-    JWT_SECRET_KEY: str
+    JWT_SECRET_KEY: str = Field(min_length=32)
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_LIFETIME_MINUTES: int = 15
     JWT_REFRESH_TOKEN_LIFETIME_DAYS: int = 7

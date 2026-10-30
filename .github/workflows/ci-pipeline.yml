@@ -15,6 +15,7 @@ env:
   POSTGRES_HOST: localhost
   POSTGRES_PORT: 5432
   JWT_SECRET_KEY: ci-only-not-a-real-secret-123456
+  IMAGE_NAME: ghcr.io/omerlenko/online-cinema-api
 
 jobs:
   test-and-lint:
@@ -69,5 +70,78 @@ jobs:
       - name: Run Tests
         run: poetry run pytest --cov
 
-      - name: Build Docker Image
-        run: docker build .
+  build-and-push:
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker BuildX
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to ghcr
+        if: github.event_name == 'push'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      EC2_HOST: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up SSH
+        env:
+          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          HOST_KEY: ${{ secrets.EC2_HOST_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$HOST_KEY" > ~/.ssh/known_hosts
+
+      - name: Copy Docker Compose
+        run: |
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yaml "$EC2_USER@$EC2_HOST:~/app/"
+
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" "
+            cd ~/app &&
+            export IMAGE_TAG=${{ github.sha }} &&
+            docker compose -f docker-compose.prod.yaml pull &&
+            docker compose -f docker-compose.prod.yaml up -d &&
+            docker image prune -af
+          "
+
+      - name: Check health
+        run: |
+          curl --fail --silent --show-error --retry 15 --retry-delay 3 --retry-all-errors --output /dev/null "http://$EC2_HOST/health"

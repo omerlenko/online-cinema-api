@@ -7,6 +7,8 @@ async SQLAlchemy.
 
 > 🚧 In active development.
 
+Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
+
 ## Features
 
 ### Accounts
@@ -40,11 +42,11 @@ async SQLAlchemy.
 - **PostgreSQL 18**, **SQLAlchemy 2.0** (async) with **asyncpg**, **Alembic** for migrations
 - **JWT** authentication via **PyJWT**, **Argon2** password hashing via **pwdlib**
 - **Celery** with **Redis** as the broker, and **Celery beat** for scheduled tasks
-- **Docker** and **Docker Compose**, **Mailpit** for local email testing
+- **Docker** and **Docker Compose**, **Mailpit** for email testing
 - **Poetry** for dependency management
 - **pytest** + **pytest-asyncio** + **pytest-cov** for testing
 - **black**, **flake8**, **mypy** (strict) for code quality
-- **GitHub Actions** for CI
+- **GitHub Actions** for CI and automatic deployment to **AWS EC2**, with images stored in **GitHub Container Registry**
 
 ## Quick Start (Docker)
 
@@ -143,6 +145,9 @@ active. When running the API locally, use `poetry run python -m src.accounts.cre
   list removes them all.
 - Genres, stars, directors and certifications are stored as typed; a name that differs only in letter case from an
   existing one is rejected.
+- Numbers are checked before they reach the database, and invalid values are rejected with 422: release year
+  1895–2100, duration 1–600 minutes, IMDb rating 0–10, Metascore 0–100, votes not negative, and price not negative,
+  at most 99,999,999.99 with two decimal places.
 
 ### Browsing the catalog
 
@@ -247,7 +252,20 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
   out.
 - **Inactive accounts** cannot log in, refresh, or use existing access tokens.
 - **API documentation** is protected with HTTP Basic authentication when `DOCS_REQUIRE_AUTH` is enabled. Basic
-  credentials are sent with every request, so this relies on HTTPS in production.
+  credentials are sent with every request, so this relies on HTTPS (see the next point).
+- **No HTTPS in the current deployment.** The server is reached by IP address over plain HTTP, so passwords, tokens and
+  documentation credentials are not encrypted in transit. A domain name and a reverse proxy such as Caddy or Nginx would
+  fix this.
+- **Production email goes to Mailpit, not to real inboxes.** New accounts on the deployed server cannot activate
+  themselves, and an admin activates them with the activate endpoint. A real provider can be configured through the
+  `SMTP_*` settings without changing the code.
+- **Emails are sent in a background task inside the API process.** An email being sent during a restart, such as a
+  deploy, can be lost. Activation links and password resets can be requested again. Moving email to Celery would add
+  retries.
+- **SSH is open to the internet**, because GitHub's runners have no fixed IP address. Login works with keys only, and
+  password login is turned off.
+- **Deploys cause a few seconds of downtime** while the containers are replaced, and a failed deploy is not rolled back
+  automatically. Both are accepted for a single-server deployment.
 - **Password reset tokens** are stored hashed (SHA-256), work only once, and expire after 15 minutes. A new request
   replaces the previous token. Activation and refresh tokens are stored unhashed, because their value to an attacker is
   lower.
@@ -275,7 +293,7 @@ Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) 
 
 ## Configuration
 
-All settings are read from environment variables, loaded from `.env` for local development.
+All settings are read from environment variables, loaded from `.env` both for local development and on the server.
 
 | Variable                                 | Description                                     | Local default           |
 |------------------------------------------|-------------------------------------------------|-------------------------|
@@ -363,6 +381,52 @@ poetry run flake8
 poetry run mypy .
 ```
 
+## Deployment
+
+Every merge into `main` is deployed automatically to an AWS EC2 server. The pipeline is defined in
+`.github/workflows/ci-pipeline.yml`:
+
+1. **Test:** formatting, linting, type checks, the migration check and the test suite.
+2. **Build:** the Docker image is built. After a merge, it is pushed to GitHub Container Registry, tagged with the
+   commit SHA and `latest`.
+3. **Deploy:** GitHub Actions connects to the server over SSH, copies `docker-compose.prod.yaml`, pulls the image for
+   that commit and restarts the services. Migrations run when the API container starts.
+4. **Verify:** `/health` is called from outside the server, and the job fails if the API or the database does not
+   respond.
+
+Each stage runs only if the previous one passed. Pull requests run the first two stages, without pushing the image.
+
+### Production setup
+
+`docker-compose.prod.yaml` differs from the local file in a few ways:
+
+- The API, worker and beat all run the same image from the registry, so nothing is built on the server and all three
+  are always on the same version.
+- Only the API is public, on port 80. PostgreSQL and Redis have no published ports.
+- Mailpit's web UI listens only on `127.0.0.1`, because it shows every activation and password reset email.
+- All services restart automatically after a crash or a reboot.
+
+Production settings live in a `.env` file next to the Compose file on the server, readable only by its owner. They are
+never stored in the image or the repository. GitHub Secrets hold only what the pipeline needs to reach the server: the
+SSH deploy key, the host, its host key and the user.
+
+To read emails on the server, open an SSH tunnel and visit http://localhost:8025:
+
+```bash
+ssh -L 8025:localhost:8025 ubuntu@<server-ip>
+```
+
+### Rolling back
+
+Run the deploy again with the SHA of an earlier commit, from the folder with the Compose file on the server:
+
+```bash
+IMAGE_TAG=<commit-sha> docker compose -f docker-compose.prod.yaml up -d
+```
+
+This changes the code only. Database migrations are not reversed, so an older version must still work with the current
+schema. The next merge into `main` deploys the latest code again.
+
 ## Project Structure
 
 ```
@@ -375,6 +439,7 @@ src/
 └── main.py         # FastAPI app, health check, protected docs
 migrations/     # Alembic database migrations
 commands/       # container entrypoint scripts
+.github/         # CI and deployment pipeline
 tests/
 ├── unit/         # pure logic, no database
 ├── integration/  # endpoints against a real test database
