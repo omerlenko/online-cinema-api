@@ -10,6 +10,7 @@ from alembic import context
 from src.core.config import get_settings
 from src.accounts import models as accounts_models  # noqa: F401
 from src.movies import models as movies_models  # noqa: F401
+from src.cart import models as cart_models  # noqa: F401
 from src.database.base import Base
 
 # this is the Alembic Config object, which provides
