@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
@@ -21,7 +22,7 @@ class CartMovieSchema(BaseModel):
 
 
 class CartItemDetailSchema(BaseModel):
-    id: int
     movie: CartMovieSchema
+    added_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
