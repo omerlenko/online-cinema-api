@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload, joinedload
 
 from src.accounts.models import UserGroupEnum
 from src.accounts.models import User
+from src.cart.models import Cart, CartItem
 from src.core.config import get_settings
 from src.movies.models import (
     Genre,
@@ -426,6 +427,66 @@ async def test_delete_unknown_movie(
         f"{MOVIES_URL}/12345", headers=auth_headers(moderator)
     )
     assert response.status_code == 404, "Expected status code 404 Not Found"
+
+
+async def test_delete_movie_in_cart(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_cart: Callable[..., Awaitable[Cart]],
+    create_cart_item: Callable[..., Awaitable[CartItem]],
+):
+    moderator = await create_user(is_active=True, user_group=UserGroupEnum.MODERATOR)
+    another_user = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    movie = await create_movie()
+    cart = await create_cart(user_id=another_user.id)
+    await create_cart_item(cart=cart, movie=movie)
+
+    response = await client.delete(
+        f"{MOVIES_URL}/{movie.id}", headers=auth_headers(moderator)
+    )
+    assert response.status_code == 409, "Expected status code 409 Conflict"
+
+    assert "in 1 cart(s)" in response.json()["detail"]
+    assert await db_session.scalar(
+        select(exists().where(Movie.id == movie.id))
+    ), "Movie was deleted from the database"
+
+
+async def test_delete_movie_in_cart_force(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_cart: Callable[..., Awaitable[Cart]],
+    create_cart_item: Callable[..., Awaitable[CartItem]],
+):
+    moderator = await create_user(is_active=True, user_group=UserGroupEnum.MODERATOR)
+    another_user = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    movie = await create_movie()
+    cart = await create_cart(user_id=another_user.id)
+    await create_cart_item(cart=cart, movie=movie)
+
+    response = await client.delete(
+        f"{MOVIES_URL}/{movie.id}",
+        params={"force": True},
+        headers=auth_headers(moderator),
+    )
+    assert response.status_code == 204, "Expected status code 204 No Content"
+    assert (
+        await db_session.scalar(select(exists().where(Movie.id == movie.id))) is False
+    ), "Movie was not deleted from the database"
+
+    db_cart = await db_session.scalar(
+        select(Cart).where(Cart.id == cart.id).options(selectinload(Cart.items))
+    )
+    assert db_cart is not None
+    assert db_cart.items == []
 
 
 async def test_update_movie_plain_field(

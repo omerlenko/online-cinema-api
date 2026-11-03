@@ -17,6 +17,7 @@ from src.accounts.models import (
     RefreshToken,
     PasswordResetToken,
 )
+from src.cart.models import CartItem, Cart
 from src.core.mailer import get_email_sender
 from src.core.config import get_settings
 from src.core.security import (
@@ -284,3 +285,32 @@ def create_movie(db_session: AsyncSession) -> Callable[..., Awaitable[Movie]]:
         return movie
 
     return _create_movie
+
+
+@pytest.fixture
+def create_cart(db_session: AsyncSession) -> Callable[..., Awaitable[Cart]]:
+
+    async def _create_cart(user_id: int) -> Cart:
+        cart = Cart(user_id=user_id)
+        db_session.add(cart)
+        await db_session.flush()
+        return cart
+
+    return _create_cart
+
+
+@pytest.fixture
+def create_cart_item(
+    db_session: AsyncSession, create_movie: Callable[..., Awaitable[Movie]]
+) -> Callable[..., Awaitable[CartItem]]:
+
+    async def _create_cart_item(cart: Cart, movie: Movie | None = None) -> CartItem:
+        if movie is None:
+            movie = await create_movie()
+
+        cart_item = CartItem(cart=cart, movie=movie)
+        db_session.add(cart_item)
+        await db_session.flush()
+        return cart_item
+
+    return _create_cart_item
