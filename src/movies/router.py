@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.cart.crud import count_carts_with_movie
 from src.core.pagination import PaginationDep
 from src.core.schemas import ErrorResponseSchema, Page
 from src.accounts.dependencies import ModeratorUserDep
@@ -777,17 +778,35 @@ async def create_movie(
             "description": "Caller is not an admin or moderator.",
         },
         404: {"model": ErrorResponseSchema, "description": "Movie not found."},
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Movie is currently added to at least one user's cart.",
+        },
     },
     tags=["movies"],
 )
-async def delete_movie(db: DbDep, movie_id: int, moderator: ModeratorUserDep) -> None:
+async def delete_movie(
+    db: DbDep, movie_id: int, moderator: ModeratorUserDep, force: bool = False
+) -> None:
     """
     Delete a movie. Moderator/Admin only.
+
+    If the movie is currently added to at least one user's cart,
+    the request returns 409 instead.
+    Use 'force=true' query parameter (default False) to delete the movie anyway.
     """
     movie = await crud.get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
+    if not force:
+        cart_count = await count_carts_with_movie(db=db, movie_id=movie_id)
+        if cart_count > 0:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Movie is in {cart_count} cart(s). "
+                "Use force=true to delete it anyway",
+            )
     await db.delete(movie)
     await db.commit()
 
