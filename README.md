@@ -11,30 +11,24 @@ Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
 
 ## Features
 
-### Accounts
+**Accounts**
 
-- Registration with email and password (password complexity rules enforced)
-- Email activation with a link valid for 24 hours
-- Resending the activation link, without revealing whether an email is registered
-- Login with JWT access and refresh tokens
-- Refreshing the access token, and logout that revokes the refresh token
-- Current user endpoint (`/accounts/me`)
-- Password change for logged-in users, and password reset via an emailed, single-use token
-- Periodic cleanup of expired activation, refresh and password reset tokens
-- User groups (user, moderator, admin) with permission checks on protected endpoints
-- Admin endpoints to list users (with filters, search, sorting and pagination), activate accounts manually and change a
-  user's group
-- Command to create the first admin account
+- Registration with email activation, login with JWT access and refresh tokens, and logout
+- Password change, and password reset with an emailed single-use token
+- User groups (user, moderator, admin) with permission checks
+- Admin endpoints to list users, activate accounts and change groups, and a command to create the first admin
+- Scheduled cleanup of expired tokens with Celery
 
-### Movies
+**Movies**
 
-- Public, paginated movie list with filters (year range, minimum IMDb rating and Metascore, genre), search and sorting
-- Public movie details, with certification, genres, stars and directors
-- Public genre list with the number of movies in each genre
-- Moderator endpoints to create, update and delete movies
-- Moderator endpoints to manage genres, stars, directors and certifications
-- Genres, stars, directors and certifications used by a movie cannot be deleted
+- Public, paginated movie list with filters, search and sorting, and movie details
+- Moderator endpoints to manage movies, genres, stars, directors and certifications
 - Command to load a sample catalog of 100 movies
+
+**Cart**
+
+- One cart per user: add and remove movies, clear the cart, and list it
+- Moderator view of any user's cart, and a warning before deleting a movie that is in carts
 
 ## Tech Stack
 
@@ -59,21 +53,19 @@ cp .env.example .env
 docker compose up --build
 ```
 
-This starts PostgreSQL, Redis and Mailpit, waits until the database is healthy, applies database migrations, and starts
-the API together with a Celery worker and Celery beat.
+This starts PostgreSQL, Redis and Mailpit, applies database migrations, and starts the API with a Celery worker and
+Celery beat.
 
 - API: http://localhost:8000
-- Interactive docs: http://localhost:8000/docs (open by default in local development, see `DOCS_REQUIRE_AUTH`)
+- Interactive docs: http://localhost:8000/docs (every endpoint, parameter and error response is documented there)
 - Health check (includes database connectivity): http://localhost:8000/health
 - Mailpit (catches all outgoing emails, e.g. activation links): http://localhost:8025
 
-Useful commands:
-
 ```bash
-docker compose down                          # stop all services (data is kept)
-docker compose logs -f app                   # follow API logs
-docker compose run --rm app alembic current  # run a one-off command in the app image
+docker compose down                                # stop all services (data is kept)
+docker compose logs -f app                         # follow API logs
 docker compose logs -f celery-worker celery-beat   # follow background task logs
+docker compose run --rm app alembic current        # run a one-off command in the app image
 ```
 
 ### Trying it out
@@ -83,71 +75,71 @@ docker compose logs -f celery-worker celery-beat   # follow background task logs
 3. `POST /api/v1/accounts/login` to receive an access token and a refresh token.
 4. In the interactive docs, click **Authorize** and paste the access token to call protected endpoints such as
    `GET /api/v1/accounts/me`.
-5. With a moderator or admin account, create a certification and a genre, then `POST /api/v1/movies` with their ids.
-6. Or load the sample catalog (see [Loading sample movies](#loading-sample-movies)) and browse it without logging in,
+5. Load the sample catalog (see [Loading sample movies](#loading-sample-movies)) and browse it without logging in,
    e.g. `GET /api/v1/movies?search=nolan&sort_by=imdb&order=desc`.
+6. Logged in, add a movie to your cart with `POST /api/v1/cart/items` and `{"movie_id": 1}`, then view it with
+   `GET /api/v1/cart`.
 
-## Authentication
+## Accounts and Security
 
-- **Access token:** a short-lived JWT (15 minutes by default), sent as `Authorization: Bearer <token>`.
-- **Refresh token:** a long-lived JWT (7 days by default), stored in the database. `POST /accounts/refresh` exchanges it
-  for a new access token.
-- **Logout:** `POST /accounts/logout` deletes the refresh token. Each login creates its own refresh token, so logging
-  out on one device does not affect others.
+- **Access tokens** are short-lived JWTs (15 minutes by default), sent as `Authorization: Bearer <token>`. They are
+  stateless, so they cannot be revoked and stay valid until they expire, even after logout.
+- **Refresh tokens** are long-lived JWTs (7 days by default), valid only while their row exists in the database.
+  `POST /accounts/refresh` exchanges one for a new access token, and `POST /accounts/logout` deletes it. Each login
+  creates its own refresh token, so logging out on one device does not affect others. A `type` claim stops them from
+  being used as access tokens.
+- **Passwords** are hashed with Argon2. Changing a password logs out the user's other sessions, and resetting it logs
+  out all of them.
+- **Password reset tokens** are stored hashed (SHA-256), work once, expire after 15 minutes, and are sent in the request
+  body rather than a URL, so they do not end up in server logs. With no frontend, the email contains the token itself.
+- **Activation uses GET**, because the link is opened from an email. Opening it twice is harmless.
+- **No email enumeration** on resend activation, forgot password and login: they respond the same way whether or not
+  the email is registered. Registration does return 409 for a taken email, which is accepted for usability.
+- **Inactive accounts** cannot log in, refresh, or use existing access tokens.
 
-## User Groups and Permissions
+### User groups
 
-Every account belongs to one group. New accounts start in `user`.
+Every account belongs to one group. New accounts start in `user`. Groups are read from the database on every request,
+so a promotion or demotion takes effect immediately, even with an access token issued earlier.
 
 | Group       | Can do                                                                                   |
 |-------------|------------------------------------------------------------------------------------------|
-| `user`      | Use their own account                                                                    |
-| `moderator` | Everything a user can do, plus manage the movie catalog                                  |
+| `user`      | Use their own account and cart                                                           |
+| `moderator` | Everything a user can do, plus manage the movie catalog and view any user's cart         |
 | `admin`     | Everything a moderator can do, plus list users, activate accounts and change user groups |
 
-Admin endpoints:
-
-- `GET /api/v1/accounts/users` lists users, using the shared [pagination](#pagination) format. Optional query
-  parameters:
-    - `is_active` (`true` or `false`) and `group` (`user`, `moderator` or `admin`) filter the list.
-    - `search` matches part of the email address, ignoring letter case.
-    - `sort_by` (`id` by default, or `email`) and `order` (`asc` by default, or `desc`) set the order.
+- `GET /api/v1/accounts/users` lists users ([paginated](#pagination)), with filters by status and group, search by
+  email, and sorting.
 - `POST /api/v1/accounts/users/{user_id}/activate` activates an account without the email link.
-- `POST /api/v1/accounts/users/{user_id}/change-group` with `{"group_name": "moderator"}` moves a user to another group.
-  Admins can change any user's group except their own, including demoting other admins.
-
-The activate and change-group endpoints return the user's details, and repeating a request that changes nothing returns
-200 OK.
+- `POST /api/v1/accounts/users/{user_id}/change-group` moves a user to another group. Admins cannot change their own
+  group, so there is always at least one admin.
 
 ### Creating the first admin
 
-Admin rights can only be granted by an existing admin, so the first admin is created from the server:
+Admin rights can only be granted by an existing admin, so the first admin is created on the server:
 
 ```bash
 docker compose exec app python -m src.accounts.create_admin admin@example.com
 ```
 
-The command asks for the password twice, applies the same rules as registration, and creates an account that is already
-active. When running the API locally, use `poetry run python -m src.accounts.create_admin admin@example.com` instead.
+The command asks for the password at a hidden prompt, so it does not end up in shell history, and applies the same
+rules as registration. Locally, use `poetry run python -m src.accounts.create_admin admin@example.com`.
 
-## Movie Management
+## Movies
 
 | Resource                                 | Anyone                                                | Moderator or admin                                |
 |------------------------------------------|-------------------------------------------------------|---------------------------------------------------|
 | Movies                                   | `GET /api/v1/movies`, `GET /api/v1/movies/{movie_id}` | `POST /api/v1/movies`, `PATCH` and `DELETE` by id |
 | Genres, stars, directors, certifications | `GET /api/v1/movies/genres` (and `/stars`, …)         | `POST`, and `PUT` and `DELETE` by id              |
 
-- A new movie refers to its certification, genres, stars and directors by id. Unknown ids are rejected with 400, and
-  the message lists every missing id.
-- A movie is identified by its name, release year and duration: a second movie with the same three values is rejected
-  with 409.
-- `PATCH` changes only the fields that are sent. A list such as `genre_ids` replaces the current links, and an empty
-  list removes them all.
-- Genres, stars, directors and certifications are stored as typed; a name that differs only in letter case from an
-  existing one is rejected.
-- Numbers are checked before they reach the database, and invalid values are rejected with 422: release year
-  1895–2100, duration 1–600 minutes, IMDb rating 0–10, Metascore 0–100, votes not negative, and price not negative,
-  at most 99,999,999.99 with two decimal places.
+- A movie is identified by its name, release year and duration; a duplicate is rejected with 409.
+- A movie refers to its certification, genres, stars and directors by id. Unknown ids are rejected with 400, and the
+  message lists all of them.
+- `PATCH` changes only the fields that are sent. A list such as `genre_ids` replaces the current links.
+- Genre, star, director and certification names are unique regardless of letter case. Ones still used by a movie
+  cannot be deleted (409).
+- Deleting a movie that is in at least one cart is refused with 409, and the message says how many carts contain it.
+  `?force=true` deletes it anyway and removes it from those carts.
 
 ### Browsing the catalog
 
@@ -163,33 +155,42 @@ active. When running the API locally, use `poetry run python -m src.accounts.cre
 | `sort_by`              | `id` (default), `name`, `year`, `time`, `imdb`, `votes`, `meta_score`, `gross` or `price` |
 | `order`                | `asc` (default) or `desc`                                                                 |
 
-- Movies without a Metascore or box office figure are listed last, in both sort orders. Movies with equal values are
-  ordered by id, so paging through the results never skips or repeats a movie.
-- List items are short: name, year, duration, ratings, votes, box office, price, certification and genres.
-  `GET /api/v1/movies/{movie_id}` adds the description, stars and directors.
-- `GET /api/v1/movies/genres` includes `movie_count`, the number of movies in each genre.
+Movies without a Metascore or box office figure are listed last in both orders. Ties are ordered by id, so paging
+never skips or repeats a movie.
 
 ### Loading sample movies
-
-To try the catalog without entering movies by hand, load the sample data:
 
 ```bash
 docker compose exec app python -m src.movies.seed
 ```
 
-When running the API locally, use `poetry run python -m src.movies.seed` instead.
+Locally, use `poetry run python -m src.movies.seed`. The file is validated with the same rules as `POST /api/v1/movies`
+and saved in one transaction, so a failed run changes nothing. Running it again skips movies that already exist.
 
-- The whole file is validated with the same rules as `POST /api/v1/movies` before anything is written, and all movies
-  are saved in one transaction, so a failed run changes nothing.
-- The command can be run again safely: movies that already exist (same name, release year and duration) are skipped,
-  and existing genres, stars, directors and certifications are reused.
-- The sample catalog contains 100 well-known movies with original descriptions written for this project. Ratings,
-  votes and box office figures are approximate. The data is not affiliated with or taken from IMDb.
+The 100 sample movies have original descriptions written for this project. Ratings, votes and box office figures are
+approximate, and the data is not affiliated with or taken from IMDb.
+
+## Cart
+
+| Endpoint                               | Effect                                                      |
+|----------------------------------------|-------------------------------------------------------------|
+| `GET /api/v1/cart`                     | Lists the movies in your cart, in the order they were added |
+| `POST /api/v1/cart/items`              | Adds a movie, with `{"movie_id": 1}`                        |
+| `DELETE /api/v1/cart/items/{movie_id}` | Removes a movie                                             |
+| `DELETE /api/v1/cart`                  | Removes every movie                                         |
+| `GET /api/v1/cart/users/{user_id}`     | Moderator or admin: lists any user's cart                   |
+
+- Every cart endpoint requires login. The 401 without a token tells a client to ask the user to sign up or log in.
+- The cart is created on the first add. Listing, removing and clearing never create one.
+- Items are identified by the movie id, and each item shows the movie's name, year, price and genres, and when it was
+  added.
+- Two first adds at the same moment share one cart (`INSERT ... ON CONFLICT DO NOTHING`), and the same movie added
+  twice at once gets 409 from a unique constraint.
+- The cart is not paginated, because it holds only the few movies a user is about to buy.
 
 ## Pagination
 
-Both lists (`GET /api/v1/movies` and the admin user list) take `page` (default 1) and `page_size` (default 20, at most
-100), and return:
+Movie and user lists take `page` (default 1) and `page_size` (default 20, at most 100), and return:
 
 ```json
 {
@@ -202,98 +203,60 @@ Both lists (`GET /api/v1/movies` and the admin user list) take `page` (default 1
 }
 ```
 
-- `total` counts every match, not just the current page.
-- `previous_page` and `next_page` are full links that keep the filters, search and sorting of the current request, or
-  `null` on the first or last page.
-- A page past the end returns an empty `items` list, not an error.
+`previous_page` and `next_page` keep the filters, search and sorting of the current request, and are `null` on the
+first or last page. A page past the end returns an empty `items` list.
 
 ## Background Tasks
 
-Celery beat schedules a cleanup task that a Celery worker runs every 60 minutes
-(`EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES`).
-It deletes expired activation, refresh and password reset tokens, and logs how many rows it removed.
-
-Run it by hand, without waiting for the schedule:
+Celery beat schedules a task, run by a Celery worker every 60 minutes (`EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES`), that
+deletes expired activation, refresh and password reset tokens. To run it now:
 
 ```bash
 docker compose exec celery-worker celery -A src.celery_app call src.accounts.tasks.purge_expired_tokens
 ```
 
-- Redis is used only as the Celery broker. Task results are not stored, and Redis is not published outside the Compose
-  network.
-- The worker and beat use the same image as the API, but skip the migration step.
-- Tasks use their own database engine without a connection pool, because every task run starts a new event loop.
+Redis is used only as the broker and is not reachable from outside the Compose network. Tasks use their own database
+engine without a connection pool, because every task run starts a new event loop.
 
 ## API Documentation Access
 
-Swagger UI (`/docs`), ReDoc (`/redoc`) and the OpenAPI schema (`/openapi.json`) can be restricted to registered users.
+With `DOCS_REQUIRE_AUTH=True` (the default when the variable is not set), Swagger UI (`/docs`), ReDoc (`/redoc`) and
+`/openapi.json` ask for the email and password of any active account, via HTTP Basic authentication. `.env.example`
+sets it to `False`, so the docs are open in local development.
 
-- With `DOCS_REQUIRE_AUTH=True` (the default when the variable is not set), the browser asks for an email and password
-  via HTTP Basic authentication. Any active account is accepted.
-- `.env.example` sets `DOCS_REQUIRE_AUTH=False`, so the docs are open in local development.
+## Known Limitations
 
-## Security Decisions and Known Limitations
+**Deployment**
 
-- **Passwords** are hashed with Argon2 and never stored or returned in plain text.
-- **Activation uses GET**, because the link is opened from an email and there is no frontend. Activation tokens are kept
-  until they expire, so opening the link twice is harmless.
-- **Resend activation** returns the same response for every email, and **login** returns the same 401 for an unknown
-  email and a wrong password, so neither reveals whether an email is registered. Login response time is not equalized
-  between the two cases.
-- **Registration** returns 409 for an email that is already taken, which does reveal that it is registered. This is
-  accepted for usability.
-- **Access tokens are stateless** and cannot be revoked before they expire, which is why their lifetime is short. After
-  logout, an access token stays valid until it expires.
-- **Refresh tokens** carry a `type` claim, so they cannot be used as access tokens, and a unique `jti`. They are valid
-  only while their row exists in the database.
-- **Refresh tokens are stored unhashed.** A database leak would expose usable tokens until they expire. Hashing them is
-  a possible improvement.
-- **No refresh token rotation or reuse detection.** A stolen refresh token stays valid until it expires or the user logs
-  out.
-- **Inactive accounts** cannot log in, refresh, or use existing access tokens.
-- **API documentation** is protected with HTTP Basic authentication when `DOCS_REQUIRE_AUTH` is enabled. Basic
-  credentials are sent with every request, so this relies on HTTPS (see the next point).
-- **No HTTPS in the current deployment.** The server is reached by IP address over plain HTTP, so passwords, tokens and
-  documentation credentials are not encrypted in transit. A domain name and a reverse proxy such as Caddy or Nginx would
-  fix this.
-- **Production email goes to Mailpit, not to real inboxes.** New accounts on the deployed server cannot activate
-  themselves, and an admin activates them with the activate endpoint. A real provider can be configured through the
-  `SMTP_*` settings without changing the code.
-- **Emails are sent in a background task inside the API process.** An email being sent during a restart, such as a
-  deploy, can be lost. Activation links and password resets can be requested again. Moving email to Celery would add
-  retries.
-- **SSH is open to the internet**, because GitHub's runners have no fixed IP address. Login works with keys only, and
-  password login is turned off.
-- **Deploys cause a few seconds of downtime** while the containers are replaced, and a failed deploy is not rolled back
-  automatically. Both are accepted for a single-server deployment.
-- **Password reset tokens** are stored hashed (SHA-256), work only once, and expire after 15 minutes. A new request
-  replaces the previous token. Activation and refresh tokens are stored unhashed, because their value to an attacker is
-  lower.
-- **Forgot password** returns the same response for every email, and only sends a token to registered, active accounts.
-- **Changing a password** logs out the user's other sessions; **resetting** it logs out all of them. Access tokens
-  already issued stay valid until they expire.
-- **Reset tokens are sent in the request body**, never in a URL, so they do not end up in server logs. With no frontend,
-  the email contains the token itself rather than a link.
-- **Expired tokens** are deleted by a scheduled task, so they do not pile up in the database. A link opened after the
-  cleanup gets the same "invalid or expired" response as before.
-- **Groups are read from the database on every request**, not stored in the token. A promotion or demotion takes
-  effect on the user's next request, even with an access token issued earlier.
-- **Admins cannot change their own group**, so there is always at least one admin. One admin can, however, remove the
-  rights of all the others.
-- **The first admin is created on the server**, never through the API. The password is typed at a hidden prompt rather
-  than passed as an argument, so it does not end up in shell history.
-- **Catalog data in use cannot be deleted.** Deleting a genre, star, director or certification that a movie still uses
-  is refused with 409. Deleting a movie removes its links but keeps the genres, stars and directors.
-- **Duplicate names are caught only by letter case.** "Drama" and "drama" are the same genre, but different spellings
-  of one thing, such as "Sci-Fi" and "Science Fiction", are not detected. Moderators keep these lists clean.
-- **In `PATCH`, `null` means "no change"**, so the optional `meta_score` and `gross` cannot be cleared back to empty.
-- **The genre filter takes one genre at a time.** Movies in several genres can be found by any one of them.
-- **Search uses a simple case-insensitive substring match** (`ILIKE`), without a full-text index. That is fast enough
-  for a catalog of this size, but would need a search index for a much larger one.
+- **No HTTPS.** The server is reached by IP address over plain HTTP, so passwords, tokens and documentation credentials
+  are not encrypted in transit. A domain name and a reverse proxy such as Caddy would fix this.
+- **Production email goes to Mailpit**, not to real inboxes, so an admin activates new accounts with the activate
+  endpoint. A real provider needs only the `SMTP_*` settings.
+- **Emails are sent from the API process**, so an email being sent during a restart, such as a deploy, can be lost.
+  Moving email to Celery would add retries.
+- **SSH is open to the internet**, because GitHub's runners have no fixed IP address. Login works with keys only.
+- **Deploys cause a few seconds of downtime**, and a failed deploy is not rolled back automatically.
+
+**Accounts**
+
+- **Refresh tokens are stored unhashed**, and there is no rotation or reuse detection. A stolen refresh token stays
+  valid until it expires or the user logs out.
+- **Login response time** is not equalized between an unknown email and a wrong password.
+- **One admin can remove the rights of all the others.**
+
+**Movies and cart**
+
+- **Duplicate names are caught only by letter case.** "Sci-Fi" and "Science Fiction" are not detected.
+- **In `PATCH`, `null` means "no change"**, so `meta_score` and `gross` cannot be cleared once set.
+- **The genre filter takes one genre at a time.**
+- **Search is a substring match** (`ILIKE`) without a full-text index: fine for this catalog size, not for a much
+  larger one.
+- **Movies already purchased can still be added to the cart.** This check needs orders, which are not built yet.
+- **Users are not notified** when a moderator force-deletes a movie that is in their cart.
 
 ## Configuration
 
-All settings are read from environment variables, loaded from `.env` both for local development and on the server.
+All settings are read from environment variables, loaded from `.env` both locally and on the server.
 
 | Variable                                 | Description                                     | Local default           |
 |------------------------------------------|-------------------------------------------------|-------------------------|
@@ -321,8 +284,7 @@ All settings are read from environment variables, loaded from `.env` both for lo
 | `REDIS_HOST`                             | Redis host (Celery broker)                      | `localhost`             |
 | `REDIS_PORT`                             | Redis port                                      | `6379`                  |
 
-When running in Docker Compose, the API container overrides `POSTGRES_HOST` to `db` and `SMTP_HOST` to `mailpit`. The
-Celery containers override `REDIS_HOST` to `redis`, and the worker also overrides `POSTGRES_HOST` to `db`.
+In Docker Compose, the containers override the hosts to point at the other services (`db`, `mailpit`, `redis`).
 
 Generate a real `JWT_SECRET_KEY` with:
 
@@ -332,15 +294,8 @@ python -c "import secrets; print(secrets.token_urlsafe(64))"
 
 ## Local Development
 
-Runs the API directly on your machine, with only the infrastructure in Docker.
-
-### Prerequisites
-
-- Python 3.13
-- [Poetry](https://python-poetry.org/) 2.x
-- Docker with Docker Compose
-
-### Setup
+Runs the API on your machine, with only the infrastructure in Docker. Requires Python 3.13,
+[Poetry](https://python-poetry.org/) 2.x and Docker.
 
 ```bash
 poetry install
@@ -351,40 +306,23 @@ poetry run uvicorn src.main:app --reload
 ```
 
 Stop the API container first (`docker compose stop app`) if the full stack is running, since both use port 8000.
-The Celery worker and beat run only in Docker Compose. Running the API locally and running the tests need neither Celery
-nor Redis.
-
-### Migrations
+Celery runs only in Docker Compose; the local API and the tests do not need it.
 
 ```bash
 poetry run alembic revision --autogenerate -m "describe the change"   # create a migration
-poetry run alembic upgrade head                                       # apply migrations
 poetry run alembic check                                              # verify models match migrations
+poetry run pytest --cov                                               # tests with coverage
+poetry run black --check .                                            # formatting
+poetry run flake8                                                     # linting
+poetry run mypy .                                                     # type checks
 ```
 
-### Running tests
-
-Tests require PostgreSQL to be running (`docker compose up -d db`). A separate test database (`<POSTGRES_DB>_test`) is
-created automatically, and every test runs in a transaction that is rolled back afterward. Emails are captured by a
-fake sender, so no SMTP server is needed.
-
-```bash
-poetry run pytest          # run all tests
-poetry run pytest --cov    # with coverage report
-```
-
-### Code quality
-
-```bash
-poetry run black --check .
-poetry run flake8
-poetry run mypy .
-```
+Tests need PostgreSQL running (`docker compose up -d db`). They create a separate `<POSTGRES_DB>_test` database, roll
+back every test's transaction, and capture emails with a fake sender.
 
 ## Deployment
 
-Every merge into `main` is deployed automatically to an AWS EC2 server. The pipeline is defined in
-`.github/workflows/ci-pipeline.yml`:
+Every merge into `main` is deployed automatically to an AWS EC2 server by `.github/workflows/ci-pipeline.yml`:
 
 1. **Test:** formatting, linting, type checks, the migration check and the test suite.
 2. **Build:** the Docker image is built. After a merge, it is pushed to GitHub Container Registry, tagged with the
@@ -398,17 +336,12 @@ Each stage runs only if the previous one passed. Pull requests run the first two
 
 ### Production setup
 
-`docker-compose.prod.yaml` differs from the local file in a few ways:
-
-- The API, worker and beat all run the same image from the registry, so nothing is built on the server and all three
-  are always on the same version.
-- Only the API is public, on port 80. PostgreSQL and Redis have no published ports.
-- Mailpit's web UI listens only on `127.0.0.1`, because it shows every activation and password reset email.
+- The API, worker and beat run the same image from the registry, so nothing is built on the server.
+- Only the API is public, on port 80. PostgreSQL and Redis have no published ports, and Mailpit's web UI listens only
+  on `127.0.0.1`, because it shows every activation and password reset email.
 - All services restart automatically after a crash or a reboot.
-
-Production settings live in a `.env` file next to the Compose file on the server, readable only by its owner. They are
-never stored in the image or the repository. GitHub Secrets hold only what the pipeline needs to reach the server: the
-SSH deploy key, the host, its host key and the user.
+- Production settings live in a `.env` file on the server, readable only by its owner, never in the image or the
+  repository. GitHub Secrets hold only what the pipeline needs to reach the server.
 
 To read emails on the server, open an SSH tunnel and visit http://localhost:8025:
 
@@ -416,32 +349,30 @@ To read emails on the server, open an SSH tunnel and visit http://localhost:8025
 ssh -L 8025:localhost:8025 ubuntu@<server-ip>
 ```
 
-### Rolling back
-
-Run the deploy again with the SHA of an earlier commit, from the folder with the Compose file on the server:
+To roll back, run this on the server, from the folder with the Compose file:
 
 ```bash
 IMAGE_TAG=<commit-sha> docker compose -f docker-compose.prod.yaml up -d
 ```
 
-This changes the code only. Database migrations are not reversed, so an older version must still work with the current
-schema. The next merge into `main` deploys the latest code again.
+This changes the code only. Migrations are not reversed, so the older version must still work with the current schema.
 
 ## Project Structure
 
 ```
 src/
 ├── accounts/       # registration, authentication, user groups, admin command, token cleanup task
+├── cart/           # shopping cart
 ├── core/           # settings, security (hashing, JWT), email sending, pagination, shared schemas
 ├── database/       # engine, sessions, declarative base
-├── movies/         # movies, genres, stars, directors, certifications: models, schemas, endpoints, sample data command
+├── movies/         # movie catalog and sample data command
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
-migrations/     # Alembic database migrations
-commands/       # container entrypoint scripts
-.github/         # CI and deployment pipeline
+migrations/         # Alembic database migrations
+commands/           # container entrypoint script
+.github/            # CI and deployment pipeline
 tests/
-├── unit/         # pure logic, no database
-├── integration/  # endpoints against a real test database
-└── e2e/          # full user flows across several endpoints
+├── unit/           # pure logic, no database
+├── integration/    # endpoints against a real test database
+└── e2e/            # full user flows across several endpoints
 ```
