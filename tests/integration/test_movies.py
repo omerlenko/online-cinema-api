@@ -357,7 +357,7 @@ async def test_list_movies_sort_by_meta_score_descending(
     movie_4 = await create_movie(name="Movie 4", meta_score=90)
     movie_5 = await create_movie(name="Movie 5", meta_score=60)
 
-    query_params = {"sort_by": "meta_score", "order": "desc"}
+    query_params = {"sort_by": "meta_score", "sort_order": "desc"}
 
     response = await client.get(MOVIES_URL, params=query_params)
     assert response.status_code == 200, "Expected status code 200 OK"

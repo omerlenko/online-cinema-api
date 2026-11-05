@@ -654,7 +654,7 @@ async def list_movies(
 
     Sort movies by id(default), name, year, duration, IMDB rating,
     votes (popularity), MetaScore rating, gross earnings, price,
-    using 'sort_by' and 'order' with 'asc'(default) or 'desc'
+    using 'sort_by' and 'sort_order' with 'asc'(default) or 'desc'
     for ascending or descending order.
 
     Use `page` and `page_size` to page through the results (at most 100 per request).

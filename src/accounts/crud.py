@@ -65,7 +65,7 @@ def apply_user_filters(
 def apply_user_sorting(
     stmt: Select[tuple[User]], params: UserQueryParameters
 ) -> Select[tuple[User]]:
-    if params.order == SortOrderEnum.DESC:
+    if params.sort_order == SortOrderEnum.DESC:
         stmt = stmt.order_by(USER_SORT_COLUMNS[params.sort_by].desc())
     else:
         stmt = stmt.order_by(USER_SORT_COLUMNS[params.sort_by])

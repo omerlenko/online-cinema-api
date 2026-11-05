@@ -1431,7 +1431,7 @@ async def test_list_users_sort_by_email_descending(
         email="charlie@example.com",
     )
 
-    query_params = {"sort_by": "email", "order": "desc"}
+    query_params = {"sort_by": "email", "sort_order": "desc"}
 
     response = await client.get(
         f"{ACCOUNTS_URL}/users", params=query_params, headers=auth_headers(admin_user)

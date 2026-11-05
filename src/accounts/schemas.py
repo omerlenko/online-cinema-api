@@ -83,7 +83,7 @@ class UserQueryParameters(BaseModel):
     ) = None
 
     sort_by: UserSortField = UserSortField.ID
-    order: SortOrderEnum = SortOrderEnum.ASC
+    sort_order: SortOrderEnum = SortOrderEnum.ASC
 
 
 class RefreshTokenRequestSchema(BaseModel):

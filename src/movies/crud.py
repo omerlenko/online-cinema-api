@@ -125,7 +125,7 @@ def apply_movie_filters(
 def apply_movie_sorting(
     stmt: Select[tuple[Movie]], params: MovieQueryParameters
 ) -> Select[tuple[Movie]]:
-    if params.order == SortOrderEnum.DESC:
+    if params.sort_order == SortOrderEnum.DESC:
         stmt = stmt.order_by(MOVIE_SORT_COLUMNS[params.sort_by].desc().nulls_last())
     else:
         stmt = stmt.order_by(MOVIE_SORT_COLUMNS[params.sort_by].nulls_last())
