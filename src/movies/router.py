@@ -879,7 +879,7 @@ async def update_movie(
     if existing_movie is not None and existing_movie.id != movie_id:
         raise HTTPException(
             status_code=409,
-            detail="Movie with this name, year and duration already exists.",
+            detail="Movie with this name, year and duration already exists",
         )
 
     if movie_data.certification_id is not None:
@@ -913,7 +913,7 @@ async def update_movie(
     except IntegrityError:
         raise HTTPException(
             status_code=409,
-            detail="Movie with this name, year and duration already exists.",
+            detail="Movie with this name, year and duration already exists",
         )
     await db.commit()
 

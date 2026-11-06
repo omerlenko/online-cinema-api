@@ -109,7 +109,7 @@ async def create_order(
         raise HTTPException(
             status_code=409,
             detail="All movies in the cart are already purchased "
-            "or are in pending order",
+            "or are in pending orders",
         )
 
     order = await crud.create_order(
