@@ -111,3 +111,10 @@ async def get_order_by_id(
         .options(selectinload(Order.items).selectinload(OrderItem.movie))
     )
     return order
+
+
+async def count_orders_with_movie(db: AsyncSession, movie_id: int) -> int:
+    result = await db.execute(
+        select(func.count()).where(OrderItem.movie_id == movie_id)
+    )
+    return result.scalar_one()
