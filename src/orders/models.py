@@ -39,6 +39,7 @@ class Order(Base):
         back_populates="order",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        order_by="OrderItem.id",
     )
 
 
