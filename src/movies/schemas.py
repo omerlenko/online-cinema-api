@@ -139,4 +139,4 @@ class MovieQueryParameters(BaseModel):
     ) = None
 
     sort_by: MovieSortField = MovieSortField.ID
-    order: SortOrderEnum = SortOrderEnum.ASC
+    sort_order: SortOrderEnum = SortOrderEnum.ASC

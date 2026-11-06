@@ -37,6 +37,7 @@ from src.movies.models import (
     Star,
     Director,
 )
+from src.orders.models import Order, OrderStatusEnum, OrderItem
 from tests.helpers import FakeEmailSender
 
 settings = get_settings()
@@ -314,3 +315,37 @@ def create_cart_item(
         return cart_item
 
     return _create_cart_item
+
+
+@pytest.fixture
+def create_order(db_session: AsyncSession) -> Callable[..., Awaitable[Order]]:
+
+    async def _create_order(
+        user_id: int,
+        movies: list[Movie],
+        status: OrderStatusEnum = OrderStatusEnum.PENDING,
+        created_at: datetime | None = None,
+    ) -> Order:
+        if created_at is None:
+            created_at = datetime.now(timezone.utc)
+
+        total_amount = Decimal("0.00")
+        order_items = []
+        for movie in movies:
+            order_item = OrderItem(movie_id=movie.id, price_at_order=movie.price)
+            order_items.append(order_item)
+            total_amount += movie.price
+
+        order = Order(
+            user_id=user_id,
+            status=status,
+            created_at=created_at,
+            total_amount=total_amount,
+        )
+        order.items = order_items
+
+        db_session.add(order)
+        await db_session.flush()
+        return order
+
+    return _create_order

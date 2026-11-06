@@ -31,6 +31,7 @@ from src.movies.schemas import (
     GenreWithCountSchema,
     MovieListItemSchema,
 )
+from src.orders.crud import count_orders_with_movie
 
 router = APIRouter()
 
@@ -654,7 +655,7 @@ async def list_movies(
 
     Sort movies by id(default), name, year, duration, IMDB rating,
     votes (popularity), MetaScore rating, gross earnings, price,
-    using 'sort_by' and 'order' with 'asc'(default) or 'desc'
+    using 'sort_by' and 'sort_order' with 'asc'(default) or 'desc'
     for ascending or descending order.
 
     Use `page` and `page_size` to page through the results (at most 100 per request).
@@ -726,7 +727,7 @@ async def create_movie(
     if movie is not None:
         raise HTTPException(
             status_code=409,
-            detail="Movie with this name, year and duration already exists.",
+            detail="Movie with this name, year and duration already exists",
         )
 
     certification = await crud.get_object_by_id(
@@ -757,7 +758,7 @@ async def create_movie(
     except IntegrityError:
         raise HTTPException(
             status_code=409,
-            detail="Movie with this name, year and duration already exists.",
+            detail="Movie with this name, year and duration already exists",
         )
     await db.commit()
 
@@ -780,7 +781,8 @@ async def create_movie(
         404: {"model": ErrorResponseSchema, "description": "Movie not found."},
         409: {
             "model": ErrorResponseSchema,
-            "description": "Movie is currently added to at least one user's cart.",
+            "description": "Movie is currently added to at least one user's cart, "
+            "or is in at least one order.",
         },
     },
     tags=["movies"],
@@ -793,11 +795,22 @@ async def delete_movie(
 
     If the movie is currently added to at least one user's cart,
     the request returns 409 instead.
-    Use 'force=true' query parameter (default False) to delete the movie anyway.
+    Use `force=true` query parameter (default `false`) to delete the movie anyway.
+
+    If at least one order contains the movie, the request returns 409 instead.
+    It cannot be deleted even with `force=true`.
     """
     movie = await crud.get_movie_by_id(db=db, movie_id=movie_id)
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
+
+    order_count = await count_orders_with_movie(db=db, movie_id=movie_id)
+    if order_count > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Movie is in {order_count} order(s). "
+            "An ordered movie cannot be deleted",
+        )
 
     if not force:
         cart_count = await count_carts_with_movie(db=db, movie_id=movie_id)
@@ -807,8 +820,16 @@ async def delete_movie(
                 detail=f"Movie is in {cart_count} cart(s). "
                 "Use force=true to delete it anyway",
             )
-    await db.delete(movie)
-    await db.commit()
+
+    try:
+        await db.delete(movie)
+        await db.commit()
+    except IntegrityError:
+        raise HTTPException(
+            status_code=409,
+            detail="Movie is in at least one order. "
+            "An ordered movie cannot be deleted",
+        )
 
 
 @router.patch(
@@ -858,7 +879,7 @@ async def update_movie(
     if existing_movie is not None and existing_movie.id != movie_id:
         raise HTTPException(
             status_code=409,
-            detail="Movie with this name, year and duration already exists.",
+            detail="Movie with this name, year and duration already exists",
         )
 
     if movie_data.certification_id is not None:
@@ -892,7 +913,7 @@ async def update_movie(
     except IntegrityError:
         raise HTTPException(
             status_code=409,
-            detail="Movie with this name, year and duration already exists.",
+            detail="Movie with this name, year and duration already exists",
         )
     await db.commit()
 

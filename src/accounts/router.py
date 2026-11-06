@@ -607,7 +607,7 @@ async def admin_list_users(
 
     Search users by their email, using 'search' query parameter.
 
-    Sort users by id(default) and email, using 'sort_by' and 'order'
+    Sort users by id(default) and email, using 'sort_by' and 'sort_order'
     with 'asc'(default) or 'desc' for ascending or descending order.
 
     Use `page` and `page_size` to page through the results (at most 100 per request).

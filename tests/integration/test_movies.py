@@ -20,6 +20,7 @@ from src.movies.models import (
 )
 from src.movies.schemas import MovieSeedSchema
 from src.movies.seed import seed_movie
+from src.orders.models import Order, OrderStatusEnum
 from tests.helpers import auth_headers, create_movie_payload, seed_movie_payload
 
 settings = get_settings()
@@ -357,7 +358,7 @@ async def test_list_movies_sort_by_meta_score_descending(
     movie_4 = await create_movie(name="Movie 4", meta_score=90)
     movie_5 = await create_movie(name="Movie 5", meta_score=60)
 
-    query_params = {"sort_by": "meta_score", "order": "desc"}
+    query_params = {"sort_by": "meta_score", "sort_order": "desc"}
 
     response = await client.get(MOVIES_URL, params=query_params)
     assert response.status_code == 200, "Expected status code 200 OK"
@@ -487,6 +488,35 @@ async def test_delete_movie_in_cart_force(
     )
     assert db_cart is not None
     assert db_cart.items == []
+
+
+@pytest.mark.parametrize(
+    "status", [OrderStatusEnum.PENDING, OrderStatusEnum.PAID, OrderStatusEnum.CANCELED]
+)
+async def test_delete_movie_in_any_order(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    status: OrderStatusEnum,
+):
+    moderator = await create_user(is_active=True, user_group=UserGroupEnum.MODERATOR)
+    another_user = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    movie = await create_movie()
+    await create_order(user_id=another_user.id, movies=[movie], status=status)
+
+    response = await client.delete(
+        f"{MOVIES_URL}/{movie.id}",
+        params={"force": True},
+        headers=auth_headers(moderator),
+    )
+    assert response.status_code == 409, "Expected status code 409 Conflict"
+    assert await db_session.scalar(
+        select(exists().where(Movie.id == movie.id))
+    ), "Movie was deleted from the database"
 
 
 async def test_update_movie_plain_field(

@@ -95,7 +95,7 @@ async def test_moderator_adds_movies_and_visitor_browses_catalog(
             "genre_id": drama["id"],
             "min_imdb": 7,
             "sort_by": "imdb",
-            "order": "desc",
+            "sort_order": "desc",
             "page_size": 1,
         },
     )

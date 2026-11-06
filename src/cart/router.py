@@ -8,6 +8,8 @@ from src.cart import crud
 from src.core.schemas import ErrorResponseSchema
 from src.database.session import DbDep
 from src.movies.crud import get_movie_by_id
+from src.orders.crud import get_movie_ids_by_order_status
+from src.orders.models import OrderStatusEnum
 
 router = APIRouter()
 
@@ -57,7 +59,7 @@ async def list_cart_items(
         404: {"model": ErrorResponseSchema, "description": "Movie not found."},
         409: {
             "model": ErrorResponseSchema,
-            "description": "Movie is already in the cart.",
+            "description": "Movie is already in the cart or already purchased.",
         },
     },
 )
@@ -68,11 +70,21 @@ async def create_cart_item(
 ) -> CartItemDetailSchema:
     """
     Add a movie to the current user’s cart.
-    A 401 means the client should ask the user to sign up or log in.
+
+    A movie you already bought cannot be added.
     """
     movie = await get_movie_by_id(db=db, movie_id=item_data.movie_id)
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
+
+    purchased_movie_ids = await get_movie_ids_by_order_status(
+        db=db,
+        user_id=current_user.id,
+        status=OrderStatusEnum.PAID,
+        movie_ids=[movie.id],
+    )
+    if movie.id in purchased_movie_ids:
+        raise HTTPException(status_code=409, detail="Movie already purchased")
 
     cart = await crud.get_or_create_cart(db=db, user_id=current_user.id)
 

@@ -7,8 +7,13 @@ from src.cart.models import Cart, CartItem
 from src.movies.models import Movie
 
 
-async def get_cart_by_user_id(db: AsyncSession, user_id: int) -> Cart | None:
-    cart = await db.scalar(select(Cart).where(Cart.user_id == user_id))
+async def get_cart_by_user_id(
+    db: AsyncSession, user_id: int, locked: bool = False
+) -> Cart | None:
+    stmt = select(Cart).where(Cart.user_id == user_id)
+    if locked:
+        stmt = stmt.with_for_update()
+    cart = await db.scalar(stmt)
     return cart
 
 
