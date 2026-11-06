@@ -28,7 +28,16 @@ Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
 **Cart**
 
 - One cart per user: add and remove movies, clear the cart, and list it
+- Movies the user already bought cannot be added
 - Moderator view of any user's cart, and a warning before deleting a movie that is in carts
+
+**Orders**
+
+- Place an order from the cart, leaving out movies already bought or already in a pending order
+- Order history with filters by date and status, search by movie name, and sorting; order details; cancellation
+  before payment
+- Moderator list of all orders, with a filter by user
+- Movies that are in any order cannot be deleted
 
 ## Tech Stack
 
@@ -76,9 +85,10 @@ docker compose run --rm app alembic current        # run a one-off command in th
 4. In the interactive docs, click **Authorize** and paste the access token to call protected endpoints such as
    `GET /api/v1/accounts/me`.
 5. Load the sample catalog (see [Loading sample movies](#loading-sample-movies)) and browse it without logging in,
-   e.g. `GET /api/v1/movies?search=nolan&sort_by=imdb&order=desc`.
+   e.g. `GET /api/v1/movies?search=nolan&sort_by=imdb&sort_order=desc`.
 6. Logged in, add a movie to your cart with `POST /api/v1/cart/items` and `{"movie_id": 1}`, then view it with
    `GET /api/v1/cart`.
+7. Place an order for the movies in your cart with `POST /api/v1/orders`, then see it with `GET /api/v1/orders`.
 
 ## Accounts and Security
 
@@ -102,11 +112,13 @@ docker compose run --rm app alembic current        # run a one-off command in th
 Every account belongs to one group. New accounts start in `user`. Groups are read from the database on every request,
 so a promotion or demotion takes effect immediately, even with an access token issued earlier.
 
-| Group       | Can do                                                                                   |
-|-------------|------------------------------------------------------------------------------------------|
-| `user`      | Use their own account and cart                                                           |
-| `moderator` | Everything a user can do, plus manage the movie catalog and view any user's cart         |
-| `admin`     | Everything a moderator can do, plus list users, activate accounts and change user groups |
+| Group       | Can do                                                                                          |
+|-------------|-------------------------------------------------------------------------------------------------|
+| `user`      | Use their own account, cart and orders                                                          |
+| `moderator` | Everything a user can do, plus manage the movie catalog and view any user's cart and all orders |
+| `admin`     | Everything a moderator can do, plus list users, activate accounts and change user groups        |
+
+Moderators can view sales but not change them. Anything that changes money or accounts is left to admins.
 
 - `GET /api/v1/accounts/users` lists users ([paginated](#pagination)), with filters by status and group, search by
   email, and sorting.
@@ -140,6 +152,8 @@ rules as registration. Locally, use `poetry run python -m src.accounts.create_ad
   cannot be deleted (409).
 - Deleting a movie that is in at least one cart is refused with 409, and the message says how many carts contain it.
   `?force=true` deletes it anyway and removes it from those carts.
+- A movie that is in any order, whether pending, paid or canceled, cannot be deleted (409), even with `?force=true`,
+  so order history always shows what was ordered.
 
 ### Browsing the catalog
 
@@ -153,7 +167,7 @@ rules as registration. Locally, use `poetry run python -m src.accounts.create_ad
 | `genre_id`             | Only movies in this genre                                                                 |
 | `search`               | Matches part of the name, description, or a genre, star or director name, ignoring case   |
 | `sort_by`              | `id` (default), `name`, `year`, `time`, `imdb`, `votes`, `meta_score`, `gross` or `price` |
-| `order`                | `asc` (default) or `desc`                                                                 |
+| `sort_order`           | `asc` (default) or `desc`                                                                 |
 
 Movies without a Metascore or box office figure are listed last in both orders. Ties are ordered by id, so paging
 never skips or repeats a movie.
@@ -182,15 +196,48 @@ approximate, and the data is not affiliated with or taken from IMDb.
 
 - Every cart endpoint requires login. The 401 without a token tells a client to ask the user to sign up or log in.
 - The cart is created on the first add. Listing, removing and clearing never create one.
+- A movie the user already bought cannot be added (409). A movie in a pending order can be, since that order may still
+  be canceled.
 - Items are identified by the movie id, and each item shows the movie's name, year, price and genres, and when it was
   added.
 - Two first adds at the same moment share one cart (`INSERT ... ON CONFLICT DO NOTHING`), and the same movie added
   twice at once gets 409 from a unique constraint.
 - The cart is not paginated, because it holds only the few movies a user is about to buy.
 
+## Orders
+
+| Endpoint                                | Effect                                                     |
+|-----------------------------------------|------------------------------------------------------------|
+| `POST /api/v1/orders`                   | Places an order for the movies in your cart                |
+| `GET /api/v1/orders`                    | Lists your orders ([paginated](#pagination)), newest first |
+| `GET /api/v1/orders/{order_id}`         | Shows one of your orders                                   |
+| `POST /api/v1/orders/{order_id}/cancel` | Cancels one of your pending orders                         |
+| `GET /api/v1/orders/all`                | Moderator or admin: lists every user's orders              |
+
+- Each order shows its date, status (`pending`, `paid` or `canceled`), total, and its movies with the price at the time
+  of the order, so later price changes do not alter past orders.
+- Movies already bought, or already in another pending order, are left out of the new order and listed in
+  `excluded_movies` with the reason. An empty cart returns 400, and a cart where every movie is left out returns 409.
+- Placing an order does not change the cart.
+- The same cart ordered twice at the same moment creates one order: the cart row is locked (`SELECT ... FOR UPDATE`)
+  until the first order is saved, so the second request sees it and returns 409. The test suite cannot send truly
+  parallel requests, so this was checked by hand with two database connections.
+- Only pending orders can be canceled. Canceling a canceled order returns 200 and changes nothing, and a paid order
+  returns 409.
+- Another user's order returns 404, as if it did not exist.
+
+Both lists take these optional query parameters, and `GET /api/v1/orders/all` also takes `user_id`:
+
+| Parameter              | Effect                                                           |
+|------------------------|------------------------------------------------------------------|
+| `date_from`, `date_to` | Date range (`YYYY-MM-DD`, UTC), both days included               |
+| `status`               | `pending`, `paid` or `canceled`                                  |
+| `search`               | Orders with a movie whose name contains this text, ignoring case |
+| `sort_order`           | `desc` (default, newest first) or `asc`                          |
+
 ## Pagination
 
-Movie and user lists take `page` (default 1) and `page_size` (default 20, at most 100), and return:
+Movie, user and order lists take `page` (default 1) and `page_size` (default 20, at most 100), and return:
 
 ```json
 {
@@ -244,15 +291,18 @@ sets it to `False`, so the docs are open in local development.
 - **Login response time** is not equalized between an unknown email and a wrong password.
 - **One admin can remove the rights of all the others.**
 
-**Movies and cart**
+**Movies, cart and orders**
 
 - **Duplicate names are caught only by letter case.** "Sci-Fi" and "Science Fiction" are not detected.
 - **In `PATCH`, `null` means "no change"**, so `meta_score` and `gross` cannot be cleared once set.
 - **The genre filter takes one genre at a time.**
 - **Search is a substring match** (`ILIKE`) without a full-text index: fine for this catalog size, not for a much
   larger one.
-- **Movies already purchased can still be added to the cart.** This check needs orders, which are not built yet.
 - **Users are not notified** when a moderator force-deletes a movie that is in their cart.
+- **Orders cannot be paid yet**, so they stay pending until canceled. Payment with Stripe comes next.
+- **Pending orders never expire.** A movie in a pending order cannot be ordered again until that order is canceled.
+- **An ordered movie can never be deleted**, even when every order containing it was canceled, and there is no way to
+  hide a movie from the catalog instead.
 
 ## Configuration
 
@@ -366,6 +416,7 @@ src/
 ├── core/           # settings, security (hashing, JWT), email sending, pagination, shared schemas
 ├── database/       # engine, sessions, declarative base
 ├── movies/         # movie catalog and sample data command
+├── orders/         # orders and order history
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
 migrations/         # Alembic database migrations
