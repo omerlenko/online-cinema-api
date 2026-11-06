@@ -11,6 +11,7 @@ from src.accounts.models import User
 from src.cart.models import CartItem, Cart
 from src.core.config import get_settings
 from src.movies.models import Movie
+from src.orders.models import Order, OrderStatusEnum
 
 from tests.helpers import auth_headers
 
@@ -166,6 +167,52 @@ async def test_create_duplicate_cart_item(
         f"{CART_URL}/items", json=payload, headers=auth_headers(user)
     )
     assert response.status_code == 409, "Expected status code 409 Conflict"
+
+
+async def test_create_cart_item_with_purchased_movie(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie = await create_movie(name="Movie 1")
+    await create_order(user_id=user.id, movies=[movie], status=OrderStatusEnum.PAID)
+    payload = {"movie_id": movie.id}
+
+    response = await client.post(
+        f"{CART_URL}/items", json=payload, headers=auth_headers(user)
+    )
+    assert response.status_code == 409, "Expected status code 409 Conflict"
+    assert (
+        await db_session.scalar(select(exists().where(Cart.user_id == user.id)))
+        is False
+    )
+
+
+async def test_create_cart_item_with_movie_in_pending_order(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie = await create_movie(name="Movie 1")
+    await create_order(user_id=user.id, movies=[movie], status=OrderStatusEnum.PENDING)
+    payload = {"movie_id": movie.id}
+
+    response = await client.post(
+        f"{CART_URL}/items", json=payload, headers=auth_headers(user)
+    )
+    assert response.status_code == 201, "Expected status code 201 Created"
 
 
 async def test_create_cart_item_with_unknown_movie(
