@@ -32,6 +32,7 @@ class Order(Base):
         server_default="PENDING",
     )
     total_amount: Mapped[Decimal] = mapped_column(DECIMAL(10, 2))
+    checkout_session_id: Mapped[str | None] = mapped_column(unique=True)
 
     user: Mapped[User] = relationship("User")
     items: Mapped[list["OrderItem"]] = relationship(
