@@ -15,8 +15,10 @@ env:
   POSTGRES_HOST: localhost
   POSTGRES_PORT: 5432
   JWT_SECRET_KEY: ci-only-not-a-real-secret-123456
-  IMAGE_NAME: ghcr.io/omerlenko/online-cinema-api
+  STRIPE_SECRET_KEY: ci-only-not-a-real-secret-123456
 
+  IMAGE_NAME: ghcr.io/omerlenko/online-cinema-api
+  
 jobs:
   test-and-lint:
     runs-on: ubuntu-latest
