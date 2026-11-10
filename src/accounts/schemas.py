@@ -46,10 +46,6 @@ class ResendActivationTokenRequestSchema(BaseModel):
     email: Email
 
 
-class MessageResponseSchema(BaseModel):
-    message: str
-
-
 class UserLoginRequestSchema(BaseEmailPasswordSchema):
     password: str = Field(examples=["Password12345!"])
 

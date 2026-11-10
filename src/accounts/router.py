@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.accounts.dependencies import CurrentUserDep, AdminUserDep
 from src.core.pagination import PaginationDep
-from src.core.schemas import ErrorResponseSchema, Page
+from src.core.schemas import ErrorResponseSchema, Page, MessageResponseSchema
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
 from src.accounts import crud
@@ -14,7 +14,6 @@ from src.accounts.models import UserGroupEnum
 from src.accounts.schemas import (
     UserRegistrationResponseSchema,
     UserRegistrationRequestSchema,
-    MessageResponseSchema,
     ResendActivationTokenRequestSchema,
     UserLoginRequestSchema,
     UserLoginResponseSchema,
