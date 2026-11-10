@@ -103,13 +103,16 @@ async def create_order(db: AsyncSession, user_id: int, movies: list[Movie]) -> O
 
 
 async def get_order_by_id(
-    db: AsyncSession, order_id: int, user_id: int
+    db: AsyncSession, order_id: int, user_id: int, locked: bool = False
 ) -> Order | None:
-    order = await db.scalar(
+    stmt = (
         select(Order)
         .where(Order.id == order_id, Order.user_id == user_id)
         .options(selectinload(Order.items).selectinload(OrderItem.movie))
     )
+    if locked:
+        stmt = stmt.with_for_update()
+    order = await db.scalar(stmt)
     return order
 
 

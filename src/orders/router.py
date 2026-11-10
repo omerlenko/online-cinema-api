@@ -10,6 +10,7 @@ from src.orders.schemas import (
     OrderCreateResponseSchema,
     AdminOrderQueryParameters,
     AdminOrderDetailSchema,
+    CheckoutResponseSchema,
 )
 from src.accounts.dependencies import CurrentUserDep, ModeratorUserDep
 from src.cart.crud import get_cart_by_user_id, list_cart_items
@@ -18,6 +19,20 @@ from src.core.pagination import PaginationDep
 from src.core.schemas import ErrorResponseSchema, Page
 from src.database.session import DbDep
 from src.orders.models import OrderStatusEnum
+from src.payments.gateway import (
+    StripeGatewayDep,
+    CheckoutSessionAlreadyPaidError,
+    PaymentProviderError,
+    MIN_STRIPE_TOTAL,
+)
+from src.payments.service import (
+    start_checkout,
+    OrderNotFoundError,
+    OrderNotPendingError,
+    OrderPriceChangedError,
+    OrderTotalTooLowError,
+    cancel_order,
+)
 
 router = APIRouter()
 
@@ -268,10 +283,14 @@ async def get_order_details(
             "model": ErrorResponseSchema,
             "description": "Paid orders cannot be canceled.",
         },
+        502: {
+            "model": ErrorResponseSchema,
+            "description": "Payment provider is unavailable.",
+        },
     },
 )
 async def cancel_pending_order(
-    db: DbDep, order_id: int, current_user: CurrentUserDep
+    db: DbDep, order_id: int, current_user: CurrentUserDep, gateway: StripeGatewayDep
 ) -> OrderDetailSchema:
     """
     Cancel an order if its status is `pending`.
@@ -279,23 +298,91 @@ async def cancel_pending_order(
     Cannot cancel an order that is already paid.
 
     Canceling an already canceled order returns 200 with the order unchanged.
-    """
-    order = await crud.get_order_by_id(
-        db=db, order_id=order_id, user_id=current_user.id
-    )
-    if order is None:
-        raise HTTPException(status_code=404, detail="Order not found")
 
-    if order.status == OrderStatusEnum.PAID:
+    If a payment was started, its payment link stops working.
+    """
+    try:
+        order = await cancel_order(
+            db=db, order_id=order_id, user_id=current_user.id, gateway=gateway
+        )
+    except OrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Order not found")
+    except (OrderNotPendingError, CheckoutSessionAlreadyPaidError):
         raise HTTPException(
             status_code=409,
             detail="Paid orders cannot be canceled",
         )
-
-    if order.status == OrderStatusEnum.CANCELED:
-        return OrderDetailSchema.model_validate(order)
-
-    order.status = OrderStatusEnum.CANCELED
-    await db.commit()
+    except PaymentProviderError:
+        raise HTTPException(status_code=502, detail="Payment provider unavailable")
 
     return OrderDetailSchema.model_validate(order)
+
+
+@router.post(
+    "/{order_id}/checkout",
+    summary="Start checkout for an order",
+    responses={
+        400: {
+            "model": ErrorResponseSchema,
+            "description": "Order total amount must be at least $0.50.",
+        },
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User is not active.",
+        },
+        404: {
+            "model": ErrorResponseSchema,
+            "description": "Order is not found.",
+        },
+        409: {
+            "model": ErrorResponseSchema,
+            "description": "Order is not pending or is already paid, "
+            "or prices changed and the order was updated.",
+        },
+        502: {
+            "model": ErrorResponseSchema,
+            "description": "Payment provider is unavailable.",
+        },
+    },
+)
+async def create_checkout_session(
+    db: DbDep, order_id: int, current_user: CurrentUserDep, gateway: StripeGatewayDep
+) -> CheckoutResponseSchema:
+    """
+    Start the payment of one of your pending orders. Send the user to `checkout_url`,
+    Stripe's payment page.
+
+    Starting checkout again cancels the previous payment link.
+
+    The order becomes `paid` once Stripe confirms the payment.
+
+    If a movie's price has changed since the order was placed, the order is updated
+    to the new prices and 409 is returned; review the new total and try again.
+
+    Another user's order returns 404.
+    """
+    try:
+        checkout_url = await start_checkout(
+            db=db, order_id=order_id, user_id=current_user.id, gateway=gateway
+        )
+    except OrderNotFoundError:
+        raise HTTPException(status_code=404, detail="Order not found")
+    except OrderNotPendingError:
+        raise HTTPException(status_code=409, detail="Only pending orders can be paid")
+    except OrderPriceChangedError:
+        raise HTTPException(status_code=409, detail="Prices changed, review your order")
+    except OrderTotalTooLowError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Order total amount must be at least ${MIN_STRIPE_TOTAL}",
+        )
+    except CheckoutSessionAlreadyPaidError:
+        raise HTTPException(status_code=409, detail="Order already paid")
+    except PaymentProviderError:
+        raise HTTPException(status_code=502, detail="Payment provider unavailable")
+
+    return CheckoutResponseSchema(checkout_url=checkout_url)

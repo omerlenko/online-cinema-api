@@ -5,15 +5,25 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
-from stripe import StripeClient, InvalidRequestError
+from stripe import StripeClient, InvalidRequestError, StripeError
 from stripe.params.checkout import SessionCreateParamsLineItem
 
 from src.core.config import get_settings, Settings
+
+# Stripe's minimum total amount in USD,
+# the value must change if STRIPE_CURRENCY changes.
+MIN_STRIPE_TOTAL = Decimal("0.50")
 
 
 class CheckoutSessionAlreadyPaidError(Exception):
     """
     Raised when trying to expire a complete (paid) Stripe session.
+    """
+
+
+class PaymentProviderError(Exception):
+    """
+    Raised when a request to Stripe fails.
     """
 
 
@@ -56,17 +66,21 @@ class StripeGateway:
         cancel_url = f"{self.base_url}/payments/cancel"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=35)
 
-        session = await self.client.v1.checkout.sessions.create_async(
-            params={
-                "mode": "payment",
-                "line_items": line_items,
-                "success_url": success_url,
-                "cancel_url": cancel_url,
-                "client_reference_id": str(order_id),
-                "metadata": {"order_id": str(order_id)},
-                "expires_at": int(expires_at.timestamp()),
-            }
-        )
+        try:
+            session = await self.client.v1.checkout.sessions.create_async(
+                params={
+                    "mode": "payment",
+                    "line_items": line_items,
+                    "success_url": success_url,
+                    "cancel_url": cancel_url,
+                    "client_reference_id": str(order_id),
+                    "metadata": {"order_id": str(order_id)},
+                    "expires_at": int(expires_at.timestamp()),
+                }
+            )
+        except StripeError:
+            raise PaymentProviderError()
+
         if session.url is None:
             raise ValueError("Stripe session url is empty")
 
@@ -75,10 +89,20 @@ class StripeGateway:
     async def expire_session(self, session_id: str) -> None:
         try:
             await self.client.v1.checkout.sessions.expire_async(session_id)
+
         except InvalidRequestError:
-            session = await self.client.v1.checkout.sessions.retrieve_async(session_id)
+            try:
+                session = await self.client.v1.checkout.sessions.retrieve_async(
+                    session_id
+                )
+            except StripeError:
+                raise PaymentProviderError()
+
             if session.status == "complete":
                 raise CheckoutSessionAlreadyPaidError()
+
+        except StripeError:
+            raise PaymentProviderError()
 
 
 @lru_cache
