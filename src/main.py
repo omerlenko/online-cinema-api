@@ -11,6 +11,7 @@ from src.accounts.router import router as accounts_router
 from src.movies.router import router as movies_router
 from src.cart.router import router as cart_router
 from src.orders.router import router as orders_router
+from src.payments.router import router as payments_router
 from src.core.config import get_settings
 from src.database.session import DbDep
 from src.core.schemas import HealthResponseSchema, ErrorResponseSchema
@@ -25,6 +26,9 @@ app.include_router(movies_router, prefix=f"{api_version_prefix}/movies")
 app.include_router(cart_router, prefix=f"{api_version_prefix}/cart", tags=["cart"])
 app.include_router(
     orders_router, prefix=f"{api_version_prefix}/orders", tags=["orders"]
+)
+app.include_router(
+    payments_router, prefix=f"{api_version_prefix}/payments", tags=["payments"]
 )
 
 logger = logging.getLogger(__name__)

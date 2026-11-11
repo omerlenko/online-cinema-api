@@ -75,3 +75,7 @@ class OrderQueryParameters(BaseModel):
 
 class AdminOrderQueryParameters(OrderQueryParameters):
     user_id: int | None = None
+
+
+class CheckoutResponseSchema(BaseModel):
+    checkout_url: str

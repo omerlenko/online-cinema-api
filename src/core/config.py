@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
 
+    STRIPE_SECRET_KEY: str
+    STRIPE_CURRENCY: str = "usd"
+
     model_config = SettingsConfigDict(env_file=".env")
 
     @property

@@ -12,6 +12,10 @@ class ErrorResponseSchema(BaseModel):
     detail: str
 
 
+class MessageResponseSchema(BaseModel):
+    message: str
+
+
 class Page[T](BaseModel):
     items: list[T]
 

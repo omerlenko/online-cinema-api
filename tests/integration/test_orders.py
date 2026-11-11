@@ -13,7 +13,7 @@ from src.movies.models import Movie
 from src.orders.models import Order, OrderStatusEnum
 from src.orders.schemas import ExcludedMovieReasonEnum
 
-from tests.helpers import auth_headers
+from tests.helpers import auth_headers, FakeStripeGateway
 
 settings = get_settings()
 ORDERS_URL = f"{settings.API_VERSION_PREFIX}/orders"
@@ -504,6 +504,7 @@ async def test_cancel_order(
     db_session: AsyncSession,
     create_user: Callable[..., Awaitable[User]],
     create_order: Callable[..., Awaitable[Order]],
+    fake_stripe_gateway: FakeStripeGateway,
 ):
     user = await create_user(
         email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
@@ -521,6 +522,7 @@ async def test_cancel_order(
         select(Order.status).where(Order.id == order.id)
     )
     assert db_order_status == OrderStatusEnum.CANCELED
+    assert fake_stripe_gateway.expired_session_ids == []
 
 
 async def test_cancel_order_with_canceled_order(
@@ -595,6 +597,108 @@ async def test_cancel_order_with_another_users_order(
         select(Order.status).where(Order.id == order.id)
     )
     assert db_order_status == OrderStatusEnum.PENDING
+
+
+async def test_cancel_order_with_open_checkout_session(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    movie = await create_movie(name="Movie 1", price=Decimal("9.99"))
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.PENDING
+    )
+
+    response_checkout = await client.post(
+        f"{ORDERS_URL}/{order.id}/checkout", headers=auth_headers(user)
+    )
+    assert response_checkout.status_code == 200, "Expected status code 200 OK"
+
+    response_cancel = await client.post(
+        f"{ORDERS_URL}/{order.id}/cancel", headers=auth_headers(user)
+    )
+    assert response_cancel.status_code == 200, "Expected status code 200 OK"
+    assert (
+        await db_session.scalar(select(Order.status).where(Order.id == order.id))
+        == OrderStatusEnum.CANCELED
+    )
+    assert fake_stripe_gateway.expired_session_ids == ["cs_test_fake_1"]
+    assert (
+        await db_session.scalar(
+            select(Order.checkout_session_id).where(Order.id == order.id)
+        )
+        == "cs_test_fake_1"
+    )
+
+
+async def test_cancel_order_with_paid_checkout_session(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    movie = await create_movie(name="Movie 1", price=Decimal("9.99"))
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.PENDING
+    )
+
+    response_checkout = await client.post(
+        f"{ORDERS_URL}/{order.id}/checkout", headers=auth_headers(user)
+    )
+    assert response_checkout.status_code == 200, "Expected status code 200 OK"
+    fake_stripe_gateway.session_paid = True
+
+    response_cancel = await client.post(
+        f"{ORDERS_URL}/{order.id}/cancel", headers=auth_headers(user)
+    )
+    assert response_cancel.status_code == 409, "Expected status code 409 Conflict"
+    assert (
+        await db_session.scalar(select(Order.status).where(Order.id == order.id))
+        == OrderStatusEnum.PENDING
+    )
+
+
+async def test_cancel_order_with_payment_provider_down(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    movie = await create_movie(name="Movie 1", price=Decimal("9.99"))
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.PENDING
+    )
+
+    response_checkout = await client.post(
+        f"{ORDERS_URL}/{order.id}/checkout", headers=auth_headers(user)
+    )
+    assert response_checkout.status_code == 200, "Expected status code 200 OK"
+    fake_stripe_gateway.provider_down = True
+
+    response_cancel = await client.post(
+        f"{ORDERS_URL}/{order.id}/cancel", headers=auth_headers(user)
+    )
+    assert response_cancel.status_code == 502, "Expected status code 502 Bad Gateway"
+    assert (
+        await db_session.scalar(select(Order.status).where(Order.id == order.id))
+        == OrderStatusEnum.PENDING
+    )
 
 
 async def test_list_all_orders_as_user(

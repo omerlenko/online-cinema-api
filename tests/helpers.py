@@ -4,6 +4,12 @@ from typing import Any
 
 from src.accounts.models import User
 from src.core.security import create_access_token
+from src.payments.gateway import (
+    StripeSession,
+    CheckoutSessionAlreadyPaidError,
+    CheckoutItem,
+    PaymentProviderError,
+)
 
 
 def auth_headers(user: User) -> dict[str, str]:
@@ -25,6 +31,40 @@ class FakeEmailSender:
     def send_email(self, to: str, subject: str, body: str) -> None:
         email = SentEmail(to, subject, body)
         self.sent_emails.append(email)
+
+
+class FakeStripeGateway:
+
+    def __init__(self, session_paid: bool = False, provider_down: bool = False) -> None:
+        self.id_counter = 0
+        self.created_sessions: list[tuple[int, list[CheckoutItem]]] = []
+
+        self.session_paid = session_paid
+        self.provider_down = provider_down
+        self.expired_session_ids: list[str] = []
+
+    async def create_session(
+        self, order_id: int, checkout_items: list[CheckoutItem]
+    ) -> StripeSession:
+        if self.provider_down:
+            raise PaymentProviderError()
+
+        self.created_sessions.append((order_id, checkout_items))
+
+        session_id = f"cs_test_fake_{self.id_counter + 1}"
+        session_url = f"https://checkout.stripe.test/{session_id}"
+
+        self.id_counter += 1
+
+        return StripeSession(id=session_id, url=session_url)
+
+    async def expire_session(self, session_id: str) -> None:
+        if self.provider_down:
+            raise PaymentProviderError()
+
+        self.expired_session_ids.append(session_id)
+        if self.session_paid:
+            raise CheckoutSessionAlreadyPaidError()
 
 
 def extract_reset_token_from_email(email_body: str) -> str:

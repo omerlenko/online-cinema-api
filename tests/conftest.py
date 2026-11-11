@@ -38,7 +38,8 @@ from src.movies.models import (
     Director,
 )
 from src.orders.models import Order, OrderStatusEnum, OrderItem
-from tests.helpers import FakeEmailSender
+from src.payments.gateway import get_stripe_gateway
+from tests.helpers import FakeEmailSender, FakeStripeGateway
 
 settings = get_settings()
 TEST_DB_NAME = f"{settings.POSTGRES_DB}_test"
@@ -349,3 +350,14 @@ def create_order(db_session: AsyncSession) -> Callable[..., Awaitable[Order]]:
         return order
 
     return _create_order
+
+
+@pytest.fixture(autouse=True)
+def fake_stripe_gateway(monkeypatch: MonkeyPatch) -> FakeStripeGateway:
+    fake = FakeStripeGateway()
+    monkeypatch.setitem(
+        app.dependency_overrides,
+        get_stripe_gateway,
+        lambda: fake,
+    )
+    return fake
