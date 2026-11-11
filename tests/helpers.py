@@ -8,6 +8,7 @@ from src.payments.gateway import (
     StripeSession,
     CheckoutSessionAlreadyPaidError,
     CheckoutItem,
+    PaymentProviderError,
 )
 
 
@@ -34,16 +35,20 @@ class FakeEmailSender:
 
 class FakeStripeGateway:
 
-    def __init__(self, session_paid: bool = False) -> None:
+    def __init__(self, session_paid: bool = False, provider_down: bool = False) -> None:
         self.id_counter = 0
         self.created_sessions: list[tuple[int, list[CheckoutItem]]] = []
 
         self.session_paid = session_paid
+        self.provider_down = provider_down
         self.expired_session_ids: list[str] = []
 
     async def create_session(
         self, order_id: int, checkout_items: list[CheckoutItem]
     ) -> StripeSession:
+        if self.provider_down:
+            raise PaymentProviderError()
+
         self.created_sessions.append((order_id, checkout_items))
 
         session_id = f"cs_test_fake_{self.id_counter + 1}"
@@ -54,6 +59,9 @@ class FakeStripeGateway:
         return StripeSession(id=session_id, url=session_url)
 
     async def expire_session(self, session_id: str) -> None:
+        if self.provider_down:
+            raise PaymentProviderError()
+
         self.expired_session_ids.append(session_id)
         if self.session_paid:
             raise CheckoutSessionAlreadyPaidError()
