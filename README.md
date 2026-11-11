@@ -39,12 +39,18 @@ Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
 - Moderator list of all orders, with a filter by user
 - Movies that are in any order cannot be deleted
 
+**Payments**
+
+- Pay for an order on Stripe's hosted payment page (Stripe Checkout, in test mode)
+- Prices checked again before payment, and one valid payment link per order
+
 ## Tech Stack
 
 - **Python 3.13**, **FastAPI**, **Pydantic v2**
 - **PostgreSQL 18**, **SQLAlchemy 2.0** (async) with **asyncpg**, **Alembic** for migrations
 - **JWT** authentication via **PyJWT**, **Argon2** password hashing via **pwdlib**
 - **Celery** with **Redis** as the broker, and **Celery beat** for scheduled tasks
+- **Stripe** Checkout for payments, via the async **stripe** Python library
 - **Docker** and **Docker Compose**, **Mailpit** for email testing
 - **Poetry** for dependency management
 - **pytest** + **pytest-asyncio** + **pytest-cov** for testing
@@ -89,6 +95,10 @@ docker compose run --rm app alembic current        # run a one-off command in th
 6. Logged in, add a movie to your cart with `POST /api/v1/cart/items` and `{"movie_id": 1}`, then view it with
    `GET /api/v1/cart`.
 7. Place an order for the movies in your cart with `POST /api/v1/orders`, then see it with `GET /api/v1/orders`.
+8. To pay, set `STRIPE_SECRET_KEY` in `.env` to a test-mode key from your Stripe dashboard (it starts with
+   `sk_test_`), then run `docker compose up -d` so the containers pick it up. Call
+   `POST /api/v1/orders/{order_id}/checkout`, open the returned `checkout_url`, and pay with the test card
+   `4242 4242 4242 4242`, any future expiry date and any CVC. No real money is charged.
 
 ## Accounts and Security
 
@@ -206,13 +216,14 @@ approximate, and the data is not affiliated with or taken from IMDb.
 
 ## Orders
 
-| Endpoint                                | Effect                                                     |
-|-----------------------------------------|------------------------------------------------------------|
-| `POST /api/v1/orders`                   | Places an order for the movies in your cart                |
-| `GET /api/v1/orders`                    | Lists your orders ([paginated](#pagination)), newest first |
-| `GET /api/v1/orders/{order_id}`         | Shows one of your orders                                   |
-| `POST /api/v1/orders/{order_id}/cancel` | Cancels one of your pending orders                         |
-| `GET /api/v1/orders/all`                | Moderator or admin: lists every user's orders              |
+| Endpoint                                  | Effect                                                     |
+|-------------------------------------------|------------------------------------------------------------|
+| `POST /api/v1/orders`                     | Places an order for the movies in your cart                |
+| `GET /api/v1/orders`                      | Lists your orders ([paginated](#pagination)), newest first |
+| `GET /api/v1/orders/{order_id}`           | Shows one of your orders                                   |
+| `POST /api/v1/orders/{order_id}/checkout` | Starts paying for a pending order ([Payments](#payments))  |
+| `POST /api/v1/orders/{order_id}/cancel`   | Cancels one of your pending orders                         |
+| `GET /api/v1/orders/all`                  | Moderator or admin: lists every user's orders              |
 
 - Each order shows its date, status (`pending`, `paid` or `canceled`), total, and its movies with the price at the time
   of the order, so later price changes do not alter past orders.
@@ -223,7 +234,7 @@ approximate, and the data is not affiliated with or taken from IMDb.
   until the first order is saved, so the second request sees it and returns 409. The test suite cannot send truly
   parallel requests, so this was checked by hand with two database connections.
 - Only pending orders can be canceled. Canceling a canceled order returns 200 and changes nothing, and a paid order
-  returns 409.
+  returns 409. Canceling also expires the order's payment link.
 - Another user's order returns 404, as if it did not exist.
 
 Both lists take these optional query parameters, and `GET /api/v1/orders/all` also takes `user_id`:
@@ -234,6 +245,28 @@ Both lists take these optional query parameters, and `GET /api/v1/orders/all` al
 | `status`               | `pending`, `paid` or `canceled`                                  |
 | `search`               | Orders with a movie whose name contains this text, ignoring case |
 | `sort_order`           | `desc` (default, newest first) or `asc`                          |
+
+## Payments
+
+Payments use [Stripe Checkout](https://docs.stripe.com/payments/checkout), Stripe's hosted payment page, in test mode.
+
+1. `POST /api/v1/orders/{order_id}/checkout` returns a `checkout_url` for one of your pending orders.
+2. The client sends the user to that URL, and the user pays on Stripe's page.
+3. Stripe sends the user back to `GET /api/v1/payments/success`, or to `GET /api/v1/payments/cancel` if they leave
+   without paying.
+
+- **Prices are checked again before payment.** If a movie's price changed after the order was placed, the order is
+  updated to the new prices and checkout returns 409, so the user sees the new total before paying.
+- **An order has one valid payment link at a time.** Starting checkout again expires the previous link, and so does
+  canceling the order. If the previous link was already paid, checkout and cancel return 409. The order row is locked
+  during checkout and cancel, so two requests for the same order cannot both create a link.
+- **The return pages are public and change nothing.** Anyone can open the success URL without paying, so only a
+  confirmation from Stripe may mark an order as paid.
+- Stripe does not accept payments below $0.50, so smaller totals return 400.
+- If Stripe cannot be reached or rejects a request, the API returns 502 and logs Stripe's error. Stripe's message is
+  not shown to the client.
+- Stripe is called through a small gateway class. Tests replace it with a fake, so they never contact Stripe. The
+  real calls were checked by hand in test mode, including a paid link that cannot be expired.
 
 ## Pagination
 
@@ -299,7 +332,10 @@ sets it to `False`, so the docs are open in local development.
 - **Search is a substring match** (`ILIKE`) without a full-text index: fine for this catalog size, not for a much
   larger one.
 - **Users are not notified** when a moderator force-deletes a movie that is in their cart.
-- **Orders cannot be paid yet**, so they stay pending until canceled. Payment with Stripe comes next.
+- **Payments are not confirmed yet.** After a successful payment, the order stays `pending` until Stripe's
+  confirmation (a webhook) is handled, which comes next. Until then, the movie does not count as purchased, so it can
+  be added to the cart again, while paying for or canceling that order again returns 409.
+- **Payments run in Stripe's test mode**, and the return pages answer with JSON, since there is no frontend.
 - **Pending orders never expire.** A movie in a pending order cannot be ordered again until that order is canceled.
 - **An ordered movie can never be deleted**, even when every order containing it was canceled, and there is no way to
   hide a movie from the catalog instead.
@@ -321,7 +357,7 @@ All settings are read from environment variables, loaded from `.env` both locall
 | `SMTP_PASSWORD`                          | SMTP password (optional)                        | —                       |
 | `SMTP_USE_TLS`                           | Use STARTTLS when connecting to the SMTP server | `False`                 |
 | `EMAIL_SENDER_ADDRESS`                   | "From" address of outgoing emails               | `noreply@example.com`   |
-| `BASE_URL`                               | Public base URL used in links sent by email     | `http://127.0.0.1:8000` |
+| `BASE_URL`                               | Public base URL for email links and Stripe      | `http://127.0.0.1:8000` |
 | `API_VERSION_PREFIX`                     | Prefix for all API routes                       | `/api/v1`               |
 | `ACTIVATION_TOKEN_LIFETIME_DAYS`         | Lifetime of account activation links            | `1`                     |
 | `DOCS_REQUIRE_AUTH`                      | Require login to view the API documentation     | `False`                 |
@@ -333,6 +369,8 @@ All settings are read from environment variables, loaded from `.env` both locall
 | `EXPIRED_TOKEN_CLEANUP_INTERVAL_MINUTES` | How often expired tokens are deleted            | `60`                    |
 | `REDIS_HOST`                             | Redis host (Celery broker)                      | `localhost`             |
 | `REDIS_PORT`                             | Redis port                                      | `6379`                  |
+| `STRIPE_SECRET_KEY`                      | Stripe secret key (required, test mode)         | —                       |
+| `STRIPE_CURRENCY`                        | Currency of payments                            | `usd`                   |
 
 In Docker Compose, the containers override the hosts to point at the other services (`db`, `mailpit`, `redis`).
 
@@ -391,7 +429,8 @@ Each stage runs only if the previous one passed. Pull requests run the first two
   on `127.0.0.1`, because it shows every activation and password reset email.
 - All services restart automatically after a crash or a reboot.
 - Production settings live in a `.env` file on the server, readable only by its owner, never in the image or the
-  repository. GitHub Secrets hold only what the pipeline needs to reach the server.
+  repository. GitHub Secrets hold only what the pipeline needs to reach the server. A new required setting must be
+  added to this file before the code that needs it is deployed, or the containers will not start.
 
 To read emails on the server, open an SSH tunnel and visit http://localhost:8025:
 
@@ -417,6 +456,7 @@ src/
 ├── database/       # engine, sessions, declarative base
 ├── movies/         # movie catalog and sample data command
 ├── orders/         # orders and order history
+├── payments/       # Stripe gateway, checkout and cancel steps, payment return pages
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
 migrations/         # Alembic database migrations
