@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -9,6 +10,8 @@ from stripe import StripeClient, InvalidRequestError, StripeError
 from stripe.params.checkout import SessionCreateParamsLineItem
 
 from src.core.config import get_settings, Settings
+
+logger = logging.getLogger(__name__)
 
 # Stripe's minimum total amount in USD,
 # the value must change if STRIPE_CURRENCY changes.
@@ -78,8 +81,11 @@ class StripeGateway:
                     "expires_at": int(expires_at.timestamp()),
                 }
             )
-        except StripeError:
-            raise PaymentProviderError()
+        except StripeError as exc:
+            logger.exception(
+                "Failed to create a Stripe checkout session for order %s", order_id
+            )
+            raise PaymentProviderError() from exc
 
         if session.url is None:
             raise ValueError("Stripe session url is empty")
@@ -95,14 +101,19 @@ class StripeGateway:
                 session = await self.client.v1.checkout.sessions.retrieve_async(
                     session_id
                 )
-            except StripeError:
-                raise PaymentProviderError()
+            except StripeError as exc:
+                logger.exception(
+                    "Failed to check the status of Stripe checkout session %s",
+                    session_id,
+                )
+                raise PaymentProviderError() from exc
 
             if session.status == "complete":
                 raise CheckoutSessionAlreadyPaidError()
 
-        except StripeError:
-            raise PaymentProviderError()
+        except StripeError as exc:
+            logger.exception("Failed to expire Stripe checkout session %s", session_id)
+            raise PaymentProviderError() from exc
 
 
 @lru_cache
