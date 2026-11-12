@@ -167,7 +167,12 @@ def parse_webhook_event(
 
     if event.type == "checkout.session.completed":
         session = event.data.object
-        order_id = session.metadata.get("order_id")
+        metadata = session.metadata
+        order_id = (
+            metadata["order_id"]
+            if metadata is not None and "order_id" in metadata
+            else None
+        )
         if order_id is None:
             logger.warning(
                 "Ignored Stripe event %s: checkout session %s has no order_id",
