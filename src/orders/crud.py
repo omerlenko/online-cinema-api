@@ -121,3 +121,16 @@ async def count_orders_with_movie(db: AsyncSession, movie_id: int) -> int:
         select(func.count()).where(OrderItem.movie_id == movie_id)
     )
     return result.scalar_one()
+
+
+async def get_order_for_payment(db: AsyncSession, order_id: int) -> Order | None:
+    order = await db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(
+            selectinload(Order.user),
+            selectinload(Order.items).selectinload(OrderItem.movie),
+        )
+        .with_for_update()
+    )
+    return order

@@ -69,6 +69,17 @@ async def delete_cart_items_by_cart_id(db: AsyncSession, cart_id: int) -> None:
     await db.flush()
 
 
+async def delete_cart_items_by_movie_ids(
+    db: AsyncSession, cart_id: int, movie_ids: list[int]
+) -> None:
+    await db.execute(
+        delete(CartItem).where(
+            CartItem.cart_id == cart_id, CartItem.movie_id.in_(movie_ids)
+        )
+    )
+    await db.flush()
+
+
 async def count_carts_with_movie(db: AsyncSession, movie_id: int) -> int:
     result = await db.execute(select(func.count()).where(CartItem.movie_id == movie_id))
     return result.scalar_one()
