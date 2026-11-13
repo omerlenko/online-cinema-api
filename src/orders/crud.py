@@ -26,6 +26,14 @@ async def get_movie_ids_by_order_status(
     return set(result.all())
 
 
+def select_purchased_movie_ids(user_id: int) -> Select[tuple[int]]:
+    return (
+        select(OrderItem.movie_id)
+        .join(Order)
+        .where(Order.user_id == user_id, Order.status == OrderStatusEnum.PAID)
+    )
+
+
 def apply_order_filters(
     stmt: Select[tuple[Order]], params: OrderQueryParameters, user_id: int | None
 ) -> Select[tuple[Order]]:

@@ -2,6 +2,7 @@ from sqlalchemy import select, func, exists, Column, Select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, selectinload, joinedload
 
+from src.orders.crud import select_purchased_movie_ids
 from src.core.schemas import SortOrderEnum
 from src.movies.models import (
     UniqueNameBase,
@@ -95,8 +96,14 @@ MOVIE_SORT_COLUMNS = {
 
 
 def apply_movie_filters(
-    stmt: Select[tuple[Movie]], params: MovieQueryParameters
+    stmt: Select[tuple[Movie]],
+    params: MovieQueryParameters,
+    purchased_by: int | None = None,
 ) -> Select[tuple[Movie]]:
+    if purchased_by is not None:
+        stmt = stmt.where(
+            Movie.id.in_(select_purchased_movie_ids(user_id=purchased_by))
+        )
     if params.year_from is not None:
         stmt = stmt.where(Movie.year >= params.year_from)
     if params.year_to is not None:
@@ -137,8 +144,9 @@ async def list_movies(
     params: MovieQueryParameters,
     offset: int = 0,
     limit: int = 20,
+    purchased_by: int | None = None,
 ) -> list[Movie]:
-    stmt = apply_movie_filters(select(Movie), params)
+    stmt = apply_movie_filters(select(Movie), params, purchased_by)
     stmt = apply_movie_sorting(stmt, params)
 
     stmt = (
@@ -153,8 +161,12 @@ async def list_movies(
     return list(result.all())
 
 
-async def count_movies(db: AsyncSession, params: MovieQueryParameters) -> int:
-    stmt = apply_movie_filters(select(Movie), params)
+async def count_movies(
+    db: AsyncSession,
+    params: MovieQueryParameters,
+    purchased_by: int | None = None,
+) -> int:
+    stmt = apply_movie_filters(select(Movie), params, purchased_by)
     total_count = (
         await db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     )
