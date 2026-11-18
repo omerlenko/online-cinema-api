@@ -133,7 +133,7 @@ jobs:
 
       - name: Copy Docker Compose
         run: |
-          scp -i ~/.ssh/deploy_key docker-compose.prod.yaml "$EC2_USER@$EC2_HOST:~/app/"
+          scp -i ~/.ssh/deploy_key docker-compose.prod.yaml Caddyfile "$EC2_USER@$EC2_HOST:~/app/"
 
       - name: Deploy
         run: |
@@ -147,4 +147,4 @@ jobs:
 
       - name: Check health
         run: |
-          curl --fail --silent --show-error --retry 15 --retry-delay 3 --retry-all-errors --output /dev/null "http://$EC2_HOST/health"
+          curl --fail --silent --show-error --retry 15 --retry-delay 3 --retry-all-errors --output /dev/null "https://cinema.omerlenko.dev/health"
