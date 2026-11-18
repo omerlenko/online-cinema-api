@@ -43,6 +43,9 @@ Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
 
 - Pay for an order on Stripe's hosted payment page (Stripe Checkout, in test mode)
 - Prices checked again before payment, and one valid payment link per order
+- Payment confirmation through signed Stripe webhooks: the payment is recorded, the order becomes paid, its movies
+  leave the cart, and a confirmation email is sent
+- A list of purchased movies, with the catalog's filters, search and sorting
 
 ## Tech Stack
 
@@ -99,6 +102,9 @@ docker compose run --rm app alembic current        # run a one-off command in th
    `sk_test_`), then run `docker compose up -d` so the containers pick it up. Call
    `POST /api/v1/orders/{order_id}/checkout`, open the returned `checkout_url`, and pay with the test card
    `4242 4242 4242 4242`, any future expiry date and any CVC. No real money is charged.
+9. To have the payment confirmed, forward Stripe's events to your API with the
+   [Stripe CLI](https://docs.stripe.com/stripe-cli) (see [Payment confirmation](#payment-confirmation)). The order
+   then shows as `paid`, and `GET /api/v1/movies/purchased` lists its movies.
 
 ## Accounts and Security
 
@@ -164,6 +170,8 @@ rules as registration. Locally, use `poetry run python -m src.accounts.create_ad
   `?force=true` deletes it anyway and removes it from those carts.
 - A movie that is in any order, whether pending, paid or canceled, cannot be deleted (409), even with `?force=true`,
   so order history always shows what was ordered.
+- Logged in, `GET /api/v1/movies/purchased` lists the movies from your paid orders. It takes the same parameters as
+  the movie list below.
 
 ### Browsing the catalog
 
@@ -268,6 +276,34 @@ Payments use [Stripe Checkout](https://docs.stripe.com/payments/checkout), Strip
 - Stripe is called through a small gateway class. Tests replace it with a fake, so they never contact Stripe. The
   real calls were checked by hand in test mode, including a paid link that cannot be expired.
 
+### Payment confirmation
+
+Stripe confirms a payment by calling `POST /api/v1/payments/webhook` with a `checkout.session.completed` event. Only
+that event confirms a payment.
+
+- **Every request must carry a valid `Stripe-Signature` header**, computed by Stripe with the webhook secret
+  (`STRIPE_WEBHOOK_SECRET`). The URL is public, so the signature is the only proof that a request comes from Stripe.
+  Requests with a missing or wrong signature, or a body that is not JSON, get 400.
+- A confirmed payment records a `Payment` with one `PaymentItem` per movie, marks the order `paid`, removes its movies
+  from the buyer's cart and emails a confirmation. The order row is locked while this happens.
+- **Stripe can deliver the same event more than once.** An order that is already paid is left alone, and the payment
+  intent id is unique, so a repeated event records nothing and sends no second email.
+- Every correctly signed event gets 200, so Stripe does not keep retrying events that can never be processed, and
+  events that cannot be applied change nothing. Other event types are ignored, and so are sessions that are not paid
+  or have no order id, with a warning in the log. An unknown order, a link that is not the order's current one, a
+  canceled order or an amount that differs from the order total is logged as an error for a person to check.
+- An unexpected failure, such as the database being down, returns 500, and Stripe retries the event later.
+
+To receive events locally, run the [Stripe CLI](https://docs.stripe.com/stripe-cli) next to the API and copy the
+`whsec_...` secret it prints into `STRIPE_WEBHOOK_SECRET`:
+
+```bash
+stripe listen --events checkout.session.completed --forward-to localhost:8000/api/v1/payments/webhook
+stripe events resend <event_id>   # in another terminal: deliver an event again, e.g. to test repeated delivery
+```
+
+Tests send events signed in the test itself, with the same check as in production.
+
 ## Pagination
 
 Movie, user and order lists take `page` (default 1) and `page_size` (default 20, at most 100), and return:
@@ -323,6 +359,9 @@ sets it to `False`, so the docs are open in local development.
   valid until it expires or the user logs out.
 - **Login response time** is not equalized between an unknown email and a wrong password.
 - **One admin can remove the rights of all the others.**
+- **Login has no rate limit**, so nothing slows down someone trying many passwords.
+- **Activation tokens appear in the server's access logs**, because the activation link is a `GET` opened from an
+  email. They work once and expire after 24 hours.
 
 **Movies, cart and orders**
 
@@ -332,10 +371,11 @@ sets it to `False`, so the docs are open in local development.
 - **Search is a substring match** (`ILIKE`) without a full-text index: fine for this catalog size, not for a much
   larger one.
 - **Users are not notified** when a moderator force-deletes a movie that is in their cart.
-- **Payments are not confirmed yet.** After a successful payment, the order stays `pending` until Stripe's
-  confirmation (a webhook) is handled, which comes next. Until then, the movie does not count as purchased, so it can
-  be added to the cart again, while paying for or canceling that order again returns 409.
+- **The live server does not receive Stripe's webhooks yet**, because Stripe only delivers to HTTPS addresses. Paid
+  orders on the demo stay `pending`; locally, with the Stripe CLI, the whole flow works.
 - **Payments run in Stripe's test mode**, and the return pages answer with JSON, since there is no frontend.
+- **Only instant payment methods such as cards are confirmed.** Bank debits that settle days later are not handled,
+  and neither are refunds.
 - **Pending orders never expire.** A movie in a pending order cannot be ordered again until that order is canceled.
 - **An ordered movie can never be deleted**, even when every order containing it was canceled, and there is no way to
   hide a movie from the catalog instead.
@@ -370,6 +410,7 @@ All settings are read from environment variables, loaded from `.env` both locall
 | `REDIS_HOST`                             | Redis host (Celery broker)                      | `localhost`             |
 | `REDIS_PORT`                             | Redis port                                      | `6379`                  |
 | `STRIPE_SECRET_KEY`                      | Stripe secret key (required, test mode)         | —                       |
+| `STRIPE_WEBHOOK_SECRET`                  | Verifies Stripe's webhooks (required)           | —                       |
 | `STRIPE_CURRENCY`                        | Currency of payments                            | `usd`                   |
 
 In Docker Compose, the containers override the hosts to point at the other services (`db`, `mailpit`, `redis`).
@@ -456,7 +497,7 @@ src/
 ├── database/       # engine, sessions, declarative base
 ├── movies/         # movie catalog and sample data command
 ├── orders/         # orders and order history
-├── payments/       # Stripe gateway, checkout and cancel steps, payment return pages
+├── payments/       # Stripe gateway, checkout and cancel steps, payment webhook and records, return pages
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
 migrations/         # Alembic database migrations
