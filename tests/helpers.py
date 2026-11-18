@@ -1,8 +1,13 @@
+import json
 import re
 from dataclasses import dataclass
 from typing import Any
 
+import stripe
+from httpx import AsyncClient, Response
+
 from src.accounts.models import User
+from src.core.config import get_settings
 from src.core.security import create_access_token
 from src.payments.gateway import (
     StripeSession,
@@ -10,6 +15,8 @@ from src.payments.gateway import (
     CheckoutItem,
     PaymentProviderError,
 )
+
+settings = get_settings()
 
 
 def auth_headers(user: User) -> dict[str, str]:
@@ -135,3 +142,45 @@ def seed_movie_payload(
     if kwargs:
         movie_seed_data.update(**kwargs)
     return movie_seed_data
+
+
+def build_stripe_event(
+    event_type: str = "checkout.session.completed",
+    session_id: str = "cs_test_1",
+    order_id: int | None = None,
+    amount: int = 999,
+    payment_intent: str | None = "pi_test_1",
+    payment_status: str = "paid",
+) -> dict[str, Any]:
+    metadata = {}
+    if order_id is not None:
+        metadata = {"order_id": str(order_id)}
+
+    event_payload = {
+        "id": "evt_test_1",
+        "object": "event",
+        "type": event_type,
+        "data": {
+            "object": {
+                "id": session_id,
+                "object": "checkout.session",
+                "metadata": metadata,
+                "amount_total": amount,
+                "payment_intent": payment_intent,
+                "payment_status": payment_status,
+            }
+        },
+    }
+    return event_payload
+
+
+async def post_signed_webhook(
+    client: AsyncClient, webhook_url: str, event: dict[str, Any]
+) -> Response:
+    payload = json.dumps(event)
+    signature = stripe.WebhookSignature.generate_signature_header(
+        payload, settings.STRIPE_WEBHOOK_SECRET
+    )
+    return await client.post(
+        webhook_url, content=payload, headers={"Stripe-Signature": signature}
+    )

@@ -1,10 +1,20 @@
+import logging
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.orders.crud import get_order_by_id
+from src.cart.crud import get_cart_by_user_id, delete_cart_items_by_movie_ids
+from src.orders.crud import get_order_by_id, get_order_for_payment
 from src.orders.models import OrderStatusEnum, Order
-from src.payments.gateway import StripeGateway, CheckoutItem, MIN_STRIPE_TOTAL
+from src.payments.crud import create_payment
+from src.payments.gateway import (
+    StripeGateway,
+    CheckoutItem,
+    MIN_STRIPE_TOTAL,
+    CheckoutCompletedEvent,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class OrderNotFoundError(Exception):
@@ -99,4 +109,87 @@ async def cancel_order(
     order.status = OrderStatusEnum.CANCELED
     await db.commit()
 
+    return order
+
+
+async def handle_checkout_completed(
+    db: AsyncSession, event: CheckoutCompletedEvent
+) -> Order | None:
+    if event.payment_status != "paid":
+        logger.warning(
+            "Ignored Stripe event %s: payment status is %s",
+            event.event_id,
+            event.payment_status,
+        )
+        return None
+
+    order = await get_order_for_payment(db=db, order_id=event.order_id)
+    if order is None:
+        logger.error(
+            "Could not record Stripe event %s: order %s not found",
+            event.event_id,
+            event.order_id,
+        )
+        return None
+    if order.status == OrderStatusEnum.PAID:
+        logger.warning(
+            "Ignored Stripe event %s: order %s is already paid",
+            event.event_id,
+            order.id,
+        )
+        return None
+
+    if order.checkout_session_id != event.session_id:
+        logger.error(
+            "Could not record Stripe event %s: "
+            "session %s is not the current checkout session %s of order %s",
+            event.event_id,
+            event.session_id,
+            order.checkout_session_id,
+            order.id,
+        )
+        return None
+    if order.status == OrderStatusEnum.CANCELED:
+        logger.error(
+            "Could not record Stripe event %s: order %s is canceled",
+            event.event_id,
+            order.id,
+        )
+        return None
+
+    if event.amount is None or int(order.total_amount * 100) != event.amount:
+        logger.error(
+            "Could not record Stripe event %s: "
+            "amount %s does not match the total %s of order %s",
+            event.event_id,
+            event.amount,
+            int(order.total_amount * 100),
+            order.id,
+        )
+        return None
+
+    if event.payment_intent_id is None:
+        logger.error(
+            "Could not record Stripe event %s: no payment intent", event.event_id
+        )
+        return None
+
+    await create_payment(
+        db=db,
+        user_id=order.user_id,
+        order_id=order.id,
+        amount=order.total_amount,
+        external_payment_id=event.payment_intent_id,
+        order_items=order.items,
+    )
+    order.status = OrderStatusEnum.PAID
+
+    cart = await get_cart_by_user_id(db=db, user_id=order.user_id)
+    if cart is not None:
+        paid_movie_ids = [item.movie_id for item in order.items]
+        await delete_cart_items_by_movie_ids(
+            db=db, cart_id=cart.id, movie_ids=paid_movie_ids
+        )
+
+    await db.commit()
     return order

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.cart.crud import count_carts_with_movie
 from src.core.pagination import PaginationDep
 from src.core.schemas import ErrorResponseSchema, Page
-from src.accounts.dependencies import ModeratorUserDep
+from src.accounts.dependencies import ModeratorUserDep, CurrentUserDep
 from src.database.session import DbDep
 from src.movies import crud
 from src.movies.models import (
@@ -665,6 +665,49 @@ async def list_movies(
     )
     items = [MovieListItemSchema.model_validate(movie) for movie in movies]
     total = await crud.count_movies(db=db, params=params)
+
+    return pagination.get_page(items=items, total=total)
+
+
+@router.get(
+    "/purchased",
+    summary="List purchased movies",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User is not active.",
+        },
+    },
+    tags=["movies"],
+)
+async def list_purchased_movies(
+    db: DbDep,
+    pagination: PaginationDep,
+    current_user: CurrentUserDep,
+    params: Annotated[MovieQueryParameters, Depends()],
+) -> Page[MovieListItemSchema]:
+    """
+    List the movies you have bought, from your paid orders.
+
+    Takes the same filters, search, sorting and pagination as the movie list.
+    """
+    movies = await crud.list_movies(
+        db=db,
+        offset=pagination.offset,
+        limit=pagination.page_size,
+        params=params,
+        purchased_by=current_user.id,
+    )
+    items = [MovieListItemSchema.model_validate(movie) for movie in movies]
+    total = await crud.count_movies(
+        db=db,
+        params=params,
+        purchased_by=current_user.id,
+    )
 
     return pagination.get_page(items=items, total=total)
 

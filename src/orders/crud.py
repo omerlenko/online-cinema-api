@@ -26,6 +26,14 @@ async def get_movie_ids_by_order_status(
     return set(result.all())
 
 
+def select_purchased_movie_ids(user_id: int) -> Select[tuple[int]]:
+    return (
+        select(OrderItem.movie_id)
+        .join(Order)
+        .where(Order.user_id == user_id, Order.status == OrderStatusEnum.PAID)
+    )
+
+
 def apply_order_filters(
     stmt: Select[tuple[Order]], params: OrderQueryParameters, user_id: int | None
 ) -> Select[tuple[Order]]:
@@ -121,3 +129,16 @@ async def count_orders_with_movie(db: AsyncSession, movie_id: int) -> int:
         select(func.count()).where(OrderItem.movie_id == movie_id)
     )
     return result.scalar_one()
+
+
+async def get_order_for_payment(db: AsyncSession, order_id: int) -> Order | None:
+    order = await db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(
+            selectinload(Order.user),
+            selectinload(Order.items).selectinload(OrderItem.movie),
+        )
+        .with_for_update()
+    )
+    return order

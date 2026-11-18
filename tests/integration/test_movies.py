@@ -749,3 +749,72 @@ async def test_seed_movie_skips_existing_movie(
 
     created_movies = await db_session.scalars(select(Movie))
     assert len(created_movies.all()) == 1
+
+
+async def test_list_purchased_movies(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+):
+    user_a = await create_user(
+        email="user_a@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_b = await create_user(
+        email="user_b@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie_1 = await create_movie(name="Movie 1")
+    movie_2 = await create_movie(name="Movie 2")
+    movie_3 = await create_movie(name="Movie 3")
+    movie_4 = await create_movie(name="Movie 4")
+
+    await create_order(user_id=user_a.id, movies=[movie_1], status=OrderStatusEnum.PAID)
+    await create_order(
+        user_id=user_a.id, movies=[movie_2], status=OrderStatusEnum.PENDING
+    )
+    await create_order(
+        user_id=user_a.id, movies=[movie_3], status=OrderStatusEnum.CANCELED
+    )
+    await create_order(user_id=user_b.id, movies=[movie_4], status=OrderStatusEnum.PAID)
+
+    response = await client.get(f"{MOVIES_URL}/purchased", headers=auth_headers(user_a))
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [movie_1.id]
+    assert response.json()["total"] == 1
+
+
+async def test_list_purchased_movies_filters(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie_1 = await create_movie(name="Movie 1: Search Key")
+    movie_2 = await create_movie(name="Movie 2")
+
+    await create_order(
+        user_id=user.id, movies=[movie_1, movie_2], status=OrderStatusEnum.PAID
+    )
+
+    response = await client.get(
+        f"{MOVIES_URL}/purchased",
+        headers=auth_headers(user),
+        params={"search": "search key"},
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+    response_ids = [item["id"] for item in response.json()["items"]]
+    assert response_ids == [movie_1.id]
+    assert response.json()["total"] == 1
+
+
+async def test_list_purchased_movies_unauthenticated(
+    client: AsyncClient,
+):
+    response = await client.get(f"{MOVIES_URL}/purchased")
+    assert response.status_code == 401, "Expected status code 401 Unauthorized"
