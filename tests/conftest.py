@@ -326,6 +326,7 @@ def create_order(db_session: AsyncSession) -> Callable[..., Awaitable[Order]]:
         movies: list[Movie],
         status: OrderStatusEnum = OrderStatusEnum.PENDING,
         created_at: datetime | None = None,
+        checkout_session_id: str | None = None,
     ) -> Order:
         if created_at is None:
             created_at = datetime.now(timezone.utc)
@@ -342,6 +343,7 @@ def create_order(db_session: AsyncSession) -> Callable[..., Awaitable[Order]]:
             status=status,
             created_at=created_at,
             total_amount=total_amount,
+            checkout_session_id=checkout_session_id,
         )
         order.items = order_items
 
