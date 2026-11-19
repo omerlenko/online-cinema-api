@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Depends, Request
 from sqlalchemy.exc import IntegrityError
 
 from src.accounts.dependencies import CurrentUserDep, AdminUserDep
 from src.core.pagination import PaginationDep
+from src.core.rate_limit import limiter, LOGIN_RATE_LIMIT, EMAIL_RATE_LIMIT
 from src.core.schemas import ErrorResponseSchema, Page, MessageResponseSchema
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
@@ -55,10 +56,16 @@ def generate_activation_link(token: str) -> str:
     summary="Register a new user",
     responses={
         409: {"model": ErrorResponseSchema, "description": "Email already registered"},
+        429: {
+            "model": ErrorResponseSchema,
+            "description": "Too many registration attempts. Try again later.",
+        },
     },
 )
+@limiter.limit(EMAIL_RATE_LIMIT)
 async def register_user(
     db: DbDep,
+    request: Request,
     data: UserRegistrationRequestSchema,
     background_tasks: BackgroundTasks,
     email_sender: EmailSenderDep,
@@ -68,6 +75,9 @@ async def register_user(
 
     The link is valid for 24 hours. If it expires, request a new one via
     `/resend-activation`.
+
+    At most 3 registration attempts per minute and 10 per hour from the same IP address.
+    Further attempts return 429 until the limit resets.
     """
     existing_user = await crud.get_user_by_email(db=db, email=data.email)
     if existing_user is not None:
@@ -147,9 +157,17 @@ async def activate_user(
 @router.post(
     "/resend-activation",
     summary="Resend activation email",
+    responses={
+        429: {
+            "model": ErrorResponseSchema,
+            "description": "Too many resend attempts. Try again later.",
+        },
+    },
 )
+@limiter.limit(EMAIL_RATE_LIMIT)
 async def resend_activation_token(
     db: DbDep,
+    request: Request,
     email_data: ResendActivationTokenRequestSchema,
     background_tasks: BackgroundTasks,
     email_sender: EmailSenderDep,
@@ -161,6 +179,9 @@ async def resend_activation_token(
     to avoid revealing if an email is registered or already active.
 
     Active accounts receive no email.
+
+    At most 3 resend attempts per minute and 10 per hour from the same IP address.
+    Further attempts return 429 until the limit resets.
     """
     user = await crud.get_user_by_email(db=db, email=email_data.email)
     if user is None or user.is_active:
@@ -208,10 +229,15 @@ async def resend_activation_token(
             "model": ErrorResponseSchema,
             "description": "Account is not activated",
         },
+        429: {
+            "model": ErrorResponseSchema,
+            "description": "Too many login attempts. Try again later.",
+        },
     },
 )
+@limiter.limit(LOGIN_RATE_LIMIT)
 async def login_user(
-    db: DbDep, login_data: UserLoginRequestSchema
+    db: DbDep, request: Request, login_data: UserLoginRequestSchema
 ) -> UserLoginResponseSchema:
     """
     Log in a registered user if their email and password are correct.
@@ -222,6 +248,9 @@ async def login_user(
     so the response does not reveal whether an email is registered.
 
     Returns access and refresh tokens if login is successful.
+
+    At most 5 login attempts per minute and 30 per hour from the same IP address.
+    Further attempts return 429 until the limit resets.
     """
     user = await crud.get_user_by_email(db=db, email=login_data.email)
     if user is None:
@@ -394,9 +423,17 @@ async def change_password(
 @router.post(
     "/forgot-password",
     summary="Request password reset email",
+    responses={
+        429: {
+            "model": ErrorResponseSchema,
+            "description": "Too many password reset requests. Try again later.",
+        },
+    },
 )
+@limiter.limit(EMAIL_RATE_LIMIT)
 async def forgot_password(
     db: DbDep,
+    request: Request,
     email_data: ForgotPasswordRequestSchema,
     email_sender: EmailSenderDep,
     background_tasks: BackgroundTasks,
@@ -411,6 +448,10 @@ async def forgot_password(
 
     Endpoint returns identical message in all cases
     to avoid revealing if an email is registered and active.
+
+    At most 3 password reset requests per minute
+    and 10 per hour from the same IP address.
+    Further attempts return 429 until the limit resets.
     """
     user = await crud.get_user_by_email(db=db, email=email_data.email)
     if user is None or not user.is_active:

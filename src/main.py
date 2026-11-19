@@ -1,11 +1,13 @@
 import logging
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
+from src.core.rate_limit import limiter
 from src.accounts.dependencies import validate_docs_credentials
 from src.accounts.router import router as accounts_router
 from src.movies.router import router as movies_router
@@ -17,6 +19,7 @@ from src.database.session import DbDep
 from src.core.schemas import HealthResponseSchema, ErrorResponseSchema
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+app.state.limiter = limiter
 settings = get_settings()
 api_version_prefix = settings.API_VERSION_PREFIX
 app.include_router(
@@ -32,6 +35,15 @@ app.include_router(
 )
 
 logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(
+    request: Request, exc: RateLimitExceeded
+) -> JSONResponse:
+    return JSONResponse(
+        content={"detail": f"Rate limit exceeded: {exc.detail}"}, status_code=429
+    )
 
 
 @app.get(
