@@ -1494,3 +1494,35 @@ async def test_list_users_with_no_permission(
         headers=auth_headers(regular_user),
     )
     assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_login_rate_limiter(
+    client: AsyncClient, create_user: Callable[..., Awaitable[User]]
+):
+    email = "user@example.com"
+    await create_user(email=email, password="Password12345!", is_active=True)
+    payload = {"email": email, "password": "WrongPass123!"}
+
+    for _ in range(5):
+        response = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+        assert response.status_code == 401, "Expected status code 401 Unauthorized"
+
+    response_limit = await client.post(f"{ACCOUNTS_URL}/login", json=payload)
+    assert (
+        response_limit.status_code == 429
+    ), "Expected status code 429 Too Many Requests"
+    assert "Rate limit exceeded" in response_limit.json()["detail"]
+
+
+async def test_email_rate_limiter(client: AsyncClient):
+    payload = {"email": "user@example.com"}
+
+    for _ in range(3):
+        response = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+        assert response.status_code == 200, "Expected status code 200 OK"
+
+    response_limit = await client.post(f"{ACCOUNTS_URL}/forgot-password", json=payload)
+    assert (
+        response_limit.status_code == 429
+    ), "Expected status code 429 Too Many Requests"
+    assert "Rate limit exceeded" in response_limit.json()["detail"]
