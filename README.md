@@ -7,7 +7,7 @@ async SQLAlchemy.
 
 > 🚧 In active development.
 
-Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
+Live API: https://cinema.omerlenko.dev/api/v1/movies (see [Deployment](#deployment))
 
 ## Features
 
@@ -59,6 +59,8 @@ Live API: http://18.199.230.210/api/v1/movies (see [Deployment](#deployment))
 - **pytest** + **pytest-asyncio** + **pytest-cov** for testing
 - **black**, **flake8**, **mypy** (strict) for code quality
 - **GitHub Actions** for CI and automatic deployment to **AWS EC2**, with images stored in **GitHub Container Registry**
+- **Caddy** as the reverse proxy, with automatic HTTPS certificates from Let's Encrypt
+- **slowapi** for rate limiting
 
 ## Quick Start (Docker)
 
@@ -122,6 +124,22 @@ docker compose run --rm app alembic current        # run a one-off command in th
 - **No email enumeration** on resend activation, forgot password and login: they respond the same way whether or not
   the email is registered. Registration does return 409 for a taken email, which is accepted for usability.
 - **Inactive accounts** cannot log in, refresh, or use existing access tokens.
+- **Rate limits** on login and on the endpoints that send email (see [Rate limiting](#rate-limiting)).
+
+### Rate limiting
+
+Rate limits slow down password guessing and stop the API from being used to send mass email to other people's
+addresses. Each limit counts requests per client IP address, and a request over the limit gets 429.
+
+| Endpoint                                  | Limit per IP address         |
+|-------------------------------------------|------------------------------|
+| `POST /api/v1/accounts/login`             | 5 per minute and 30 per hour |
+| `POST /api/v1/accounts/register`          | 3 per minute and 10 per hour |
+| `POST /api/v1/accounts/resend-activation` | 3 per minute and 10 per hour |
+| `POST /api/v1/accounts/forgot-password`   | 3 per minute and 10 per hour |
+
+Each endpoint counts separately. The limits are set in `src/core/rate_limit.py`, and tests clear the counters before
+each test.
 
 ### User groups
 
@@ -344,8 +362,6 @@ sets it to `False`, so the docs are open in local development.
 
 **Deployment**
 
-- **No HTTPS.** The server is reached by IP address over plain HTTP, so passwords, tokens and documentation credentials
-  are not encrypted in transit. A domain name and a reverse proxy such as Caddy would fix this.
 - **Production email goes to Mailpit**, not to real inboxes, so an admin activates new accounts with the activate
   endpoint. A real provider needs only the `SMTP_*` settings.
 - **Emails are sent from the API process**, so an email being sent during a restart, such as a deploy, can be lost.
@@ -359,7 +375,9 @@ sets it to `False`, so the docs are open in local development.
   valid until it expires or the user logs out.
 - **Login response time** is not equalized between an unknown email and a wrong password.
 - **One admin can remove the rights of all the others.**
-- **Login has no rate limit**, so nothing slows down someone trying many passwords.
+- **Rate limits are kept in memory**, so they reset when the API restarts, for example on a deploy, and would not be
+  shared between several API processes. People behind one IP address, such as an office, share one limit, while an
+  attacker with many addresses gets around it.
 - **Activation tokens appear in the server's access logs**, because the activation link is a `GET` opened from an
   email. They work once and expire after 24 hours.
 
@@ -371,8 +389,6 @@ sets it to `False`, so the docs are open in local development.
 - **Search is a substring match** (`ILIKE`) without a full-text index: fine for this catalog size, not for a much
   larger one.
 - **Users are not notified** when a moderator force-deletes a movie that is in their cart.
-- **The live server does not receive Stripe's webhooks yet**, because Stripe only delivers to HTTPS addresses. Paid
-  orders on the demo stay `pending`; locally, with the Stripe CLI, the whole flow works.
 - **Payments run in Stripe's test mode**, and the return pages answer with JSON, since there is no frontend.
 - **Only instant payment methods such as cards are confirmed.** Bank debits that settle days later are not handled,
   and neither are refunds.
@@ -456,18 +472,27 @@ Every merge into `main` is deployed automatically to an AWS EC2 server by `.gith
 1. **Test:** formatting, linting, type checks, the migration check and the test suite.
 2. **Build:** the Docker image is built. After a merge, it is pushed to GitHub Container Registry, tagged with the
    commit SHA and `latest`.
-3. **Deploy:** GitHub Actions connects to the server over SSH, copies `docker-compose.prod.yaml`, pulls the image for
-   that commit and restarts the services. Migrations run when the API container starts.
-4. **Verify:** `/health` is called from outside the server, and the job fails if the API or the database does not
-   respond.
+3. **Deploy:** GitHub Actions connects to the server over SSH, copies `docker-compose.prod.yaml` and the `Caddyfile`,
+   pulls the image for that commit and restarts the services. Migrations run when the API container starts.
+4. **Verify:** `https://cinema.omerlenko.dev/health` is called from outside the server, and the job fails if the API,
+   the database or HTTPS does not respond.
 
 Each stage runs only if the previous one passed. Pull requests run the first two stages, without pushing the image.
 
 ### Production setup
 
 - The API, worker and beat run the same image from the registry, so nothing is built on the server.
-- Only the API is public, on port 80. PostgreSQL and Redis have no published ports, and Mailpit's web UI listens only
-  on `127.0.0.1`, because it shows every activation and password reset email.
+- The domain `cinema.omerlenko.dev` points at the server's fixed IP address with a DNS `A` record.
+- Only [Caddy](https://caddyserver.com) is public, on ports 80 and 443. It gets a Let's Encrypt certificate for the
+  domain and renews it by itself, redirects HTTP to HTTPS, and forwards requests to the API over the internal Docker
+  network. Its certificates are kept in a named volume, so redeploys reuse them.
+- The API has no published port, so it can only be reached through Caddy. That is why it can trust the
+  `X-Forwarded-For` header Caddy adds (`FORWARDED_ALLOW_IPS=*`), which gives logs and rate limits the visitor's real
+  IP address.
+- PostgreSQL and Redis have no published ports, and Mailpit's web UI listens only on `127.0.0.1`, because it shows
+  every activation and password reset email.
+- Stripe sends payment confirmations to `https://cinema.omerlenko.dev/api/v1/payments/webhook`, registered in the
+  Stripe dashboard, whose signing secret is the server's `STRIPE_WEBHOOK_SECRET`.
 - All services restart automatically after a crash or a reboot.
 - Production settings live in a `.env` file on the server, readable only by its owner, never in the image or the
   repository. GitHub Secrets hold only what the pipeline needs to reach the server. A new required setting must be
@@ -502,6 +527,7 @@ src/
 └── main.py         # FastAPI app, health check, protected docs
 migrations/         # Alembic database migrations
 commands/           # container entrypoint script
+Caddyfile           # reverse proxy and HTTPS configuration for the production server
 .github/            # CI and deployment pipeline
 tests/
 ├── unit/           # pure logic, no database
