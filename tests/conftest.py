@@ -20,6 +20,7 @@ from src.accounts.models import (
 from src.cart.models import CartItem, Cart
 from src.core.mailer import get_email_sender
 from src.core.config import get_settings
+from src.core.rate_limit import limiter
 from src.core.security import (
     hash_password,
     generate_token,
@@ -363,3 +364,8 @@ def fake_stripe_gateway(monkeypatch: MonkeyPatch) -> FakeStripeGateway:
         lambda: fake,
     )
     return fake
+
+
+@pytest.fixture(autouse=True)
+def reset_limiter() -> None:
+    limiter.reset()

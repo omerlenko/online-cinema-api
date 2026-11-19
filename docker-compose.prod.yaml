@@ -6,11 +6,23 @@ services:
     environment:
       - POSTGRES_HOST=db
       - SMTP_HOST=mailpit
+      - FORWARDED_ALLOW_IPS=*
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2.11.9-alpine
+    depends_on:
+      - app
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
     ports:
-      - "80:8000"
+      - "80:80"
+      - "443:443"
     restart: unless-stopped
 
   db:
@@ -84,3 +96,5 @@ volumes:
   pgdata:
   mailpit_data:
     driver: local
+  caddy_data:
+  caddy_config:
