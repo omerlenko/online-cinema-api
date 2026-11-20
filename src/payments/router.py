@@ -1,12 +1,21 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Request, Header, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Request, Header, HTTPException, BackgroundTasks, Depends
 
+from src.accounts.dependencies import CurrentUserDep, ModeratorUserDep
 from src.core.config import get_settings
 from src.core.mailer import EmailSenderDep
-from src.core.schemas import MessageResponseSchema, ErrorResponseSchema
+from src.core.pagination import PaginationDep
+from src.core.schemas import MessageResponseSchema, ErrorResponseSchema, Page
 from src.database.session import DbDep
+from src.payments import crud
 from src.payments.gateway import parse_webhook_event, InvalidWebhookError
+from src.payments.schemas import (
+    PaymentDetailSchema,
+    PaymentQueryParameters,
+    AdminPaymentQueryParameters,
+    AdminPaymentDetailSchema,
+)
 from src.payments.service import handle_checkout_completed
 
 router = APIRouter()
@@ -94,3 +103,92 @@ async def stripe_webhook(
     )
 
     return MessageResponseSchema(message="Event received")
+
+
+@router.get(
+    "",
+    summary="List your payments",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "User is not active.",
+        },
+    },
+)
+async def list_payments(
+    db: DbDep,
+    pagination: PaginationDep,
+    current_user: CurrentUserDep,
+    params: Annotated[PaymentQueryParameters, Depends()],
+) -> Page[PaymentDetailSchema]:
+    """
+    List the current user's payments.
+
+    Filter payments by date range and status, using `date_from`, `date_to`
+    and `status` query parameters.
+
+    Payments are sorted by creation date, newest first.
+    Use `sort_order=asc` for oldest first.
+
+    Use `page` and `page_size` to page through the results (at most 100 per request).
+    """
+    payments = await crud.list_payments(
+        db=db,
+        user_id=current_user.id,
+        offset=pagination.offset,
+        limit=pagination.page_size,
+        params=params,
+    )
+    items = [PaymentDetailSchema.model_validate(payment) for payment in payments]
+    total = await crud.count_payments(db=db, user_id=current_user.id, params=params)
+
+    return pagination.get_page(items=items, total=total)
+
+
+@router.get(
+    "/all",
+    summary="List all payments",
+    responses={
+        401: {
+            "model": ErrorResponseSchema,
+            "description": "Access token is invalid, expired, or not an access token.",
+        },
+        403: {
+            "model": ErrorResponseSchema,
+            "description": "Caller is not an admin/moderator "
+            "or their account is inactive.",
+        },
+    },
+)
+async def list_all_payments(
+    db: DbDep,
+    pagination: PaginationDep,
+    moderator: ModeratorUserDep,
+    params: Annotated[AdminPaymentQueryParameters, Depends()],
+) -> Page[AdminPaymentDetailSchema]:
+    """
+    List all payments. Moderator/Admin only.
+
+    Filter payments by user id, date range and status, using `user_id`, `date_from`,
+    `date_to` and `status` query parameters.
+
+    Payments are sorted by creation date, newest first.
+    Use `sort_order=asc` for oldest first.
+
+    Use `page` and `page_size` to page through the results (at most 100 per request).
+    """
+    payments = await crud.list_payments(
+        db=db,
+        user_id=params.user_id,
+        offset=pagination.offset,
+        limit=pagination.page_size,
+        params=params,
+    )
+    items = [AdminPaymentDetailSchema.model_validate(payment) for payment in payments]
+    total = await crud.count_payments(db=db, user_id=params.user_id, params=params)
+
+    return pagination.get_page(items=items, total=total)
