@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.core.schemas import SortOrderEnum
-from src.orders.models import OrderItem
+from src.orders.models import OrderItem, Order
 from src.payments.models import Payment, PaymentItem
 from src.payments.schemas import PaymentQueryParameters
 
@@ -33,6 +33,26 @@ async def create_payment(
     db.add(payment)
     await db.flush()
 
+    return payment
+
+
+async def get_payment_by_id(db: AsyncSession, payment_id: int) -> Payment | None:
+    stmt = select(Payment).where(Payment.id == payment_id)
+    payment = await db.scalar(stmt)
+    return payment
+
+
+async def get_payment_by_external_payment_id(
+    db: AsyncSession, external_payment_id: str, locked: bool = False
+) -> Payment | None:
+    stmt = (
+        select(Payment)
+        .where(Payment.external_payment_id == external_payment_id)
+        .options(selectinload(Payment.order).selectinload(Order.user))
+    )
+    if locked:
+        stmt = stmt.with_for_update()
+    payment = await db.scalar(stmt)
     return payment
 
 

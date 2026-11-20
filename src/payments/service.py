@@ -6,13 +6,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.cart.crud import get_cart_by_user_id, delete_cart_items_by_movie_ids
 from src.orders.crud import get_order_by_id, get_order_for_payment
 from src.orders.models import OrderStatusEnum, Order
-from src.payments.crud import create_payment
+from src.payments.crud import (
+    create_payment,
+    get_payment_by_id,
+    get_payment_by_external_payment_id,
+)
 from src.payments.gateway import (
     StripeGateway,
     CheckoutItem,
     MIN_STRIPE_TOTAL,
     CheckoutCompletedEvent,
+    ChargeRefundedEvent,
 )
+from src.payments.models import Payment, PaymentStatusEnum
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +45,18 @@ class OrderPriceChangedError(Exception):
 class OrderTotalTooLowError(Exception):
     """
     Raised when order's total amount is lower than Stripe's minimum.
+    """
+
+
+class PaymentNotFoundError(Exception):
+    """
+    Raised when the payment does not exist.
+    """
+
+
+class PaymentNotSuccessfulError(Exception):
+    """
+    Raised when a payment's status must be successful but is refunded or canceled.
     """
 
 
@@ -193,3 +211,54 @@ async def handle_checkout_completed(
 
     await db.commit()
     return order
+
+
+async def start_refund(
+    db: AsyncSession, payment_id: int, gateway: StripeGateway
+) -> Payment:
+    payment = await get_payment_by_id(db=db, payment_id=payment_id)
+    if payment is None:
+        raise PaymentNotFoundError()
+
+    if payment.status != PaymentStatusEnum.SUCCESSFUL:
+        raise PaymentNotSuccessfulError()
+
+    await gateway.refund_payment(payment.external_payment_id)
+
+    return payment
+
+
+async def handle_charge_refunded(
+    db: AsyncSession, event: ChargeRefundedEvent
+) -> Payment | None:
+    if not event.refunded:
+        logger.warning(
+            "Ignored Stripe event %s: payment intent %s is only partly refunded",
+            event.event_id,
+            event.payment_intent_id,
+        )
+        return None
+
+    payment = await get_payment_by_external_payment_id(
+        db=db, external_payment_id=event.payment_intent_id, locked=True
+    )
+    if payment is None:
+        logger.error(
+            "Could not record Stripe event %s: no payment for payment intent %s",
+            event.event_id,
+            event.payment_intent_id,
+        )
+        return None
+    if payment.status == PaymentStatusEnum.REFUNDED:
+        logger.warning(
+            "Ignored Stripe event %s: payment %s is already refunded",
+            event.event_id,
+            payment.id,
+        )
+        return None
+
+    payment.status = PaymentStatusEnum.REFUNDED
+    payment.order.status = OrderStatusEnum.CANCELED
+    await db.commit()
+
+    return payment
