@@ -1,12 +1,11 @@
-from datetime import datetime, date
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Annotated
 
-from fastapi import HTTPException
-from pydantic import BaseModel, ConfigDict, model_validator, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
 
-from src.core.schemas import SortOrderEnum
+from src.core.schemas import DateQueryParameters
 from src.orders.models import OrderStatusEnum
 
 
@@ -52,25 +51,12 @@ class OrderCreateResponseSchema(BaseModel):
     excluded_movies: list[ExcludedMovieSchema]
 
 
-class OrderQueryParameters(BaseModel):
-    date_from: date | None = None
-    date_to: date | None = None
+class OrderQueryParameters(DateQueryParameters):
     status: OrderStatusEnum | None = None
 
     search: (
         Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)] | None
     ) = None
-
-    sort_order: SortOrderEnum = SortOrderEnum.DESC
-
-    @model_validator(mode="after")
-    def validate_dates(self) -> "OrderQueryParameters":
-        if self.date_to and self.date_from and self.date_to < self.date_from:
-            raise HTTPException(
-                status_code=422, detail="date_to must be on or after date_from"
-            )
-
-        return self
 
 
 class AdminOrderQueryParameters(OrderQueryParameters):
