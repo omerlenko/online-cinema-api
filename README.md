@@ -46,6 +46,9 @@ Live API: https://cinema.omerlenko.dev/api/v1/movies (see [Deployment](#deployme
 - Payment confirmation through signed Stripe webhooks: the payment is recorded, the order becomes paid, its movies
   leave the cart, and a confirmation email is sent
 - A list of purchased movies, with the catalog's filters, search and sorting
+- Payment history with filters by date and status, and a moderator list of all payments, with a filter by user
+- Admin refunds through Stripe, recorded when Stripe confirms them: the order is canceled and a confirmation email is
+  sent
 
 ## Tech Stack
 
@@ -106,7 +109,8 @@ docker compose run --rm app alembic current        # run a one-off command in th
    `4242 4242 4242 4242`, any future expiry date and any CVC. No real money is charged.
 9. To have the payment confirmed, forward Stripe's events to your API with the
    [Stripe CLI](https://docs.stripe.com/stripe-cli) (see [Payment confirmation](#payment-confirmation)). The order
-   then shows as `paid`, and `GET /api/v1/movies/purchased` lists its movies.
+   then shows as `paid`, `GET /api/v1/movies/purchased` lists its movies, and `GET /api/v1/payments` shows the
+   payment.
 
 ## Accounts and Security
 
@@ -146,11 +150,11 @@ each test.
 Every account belongs to one group. New accounts start in `user`. Groups are read from the database on every request,
 so a promotion or demotion takes effect immediately, even with an access token issued earlier.
 
-| Group       | Can do                                                                                          |
-|-------------|-------------------------------------------------------------------------------------------------|
-| `user`      | Use their own account, cart and orders                                                          |
-| `moderator` | Everything a user can do, plus manage the movie catalog and view any user's cart and all orders |
-| `admin`     | Everything a moderator can do, plus list users, activate accounts and change user groups        |
+| Group       | Can do                                                                                                    |
+|-------------|-----------------------------------------------------------------------------------------------------------|
+| `user`      | Use their own account, cart, orders and payments                                                          |
+| `moderator` | Everything a user can do, plus manage the movie catalog and view any user's cart, all orders and payments |
+| `admin`     | Everything a moderator can do, plus refund payments, list users, activate accounts and change user groups |
 
 Moderators can view sales but not change them. Anything that changes money or accounts is left to admins.
 
@@ -260,7 +264,8 @@ approximate, and the data is not affiliated with or taken from IMDb.
   until the first order is saved, so the second request sees it and returns 409. The test suite cannot send truly
   parallel requests, so this was checked by hand with two database connections.
 - Only pending orders can be canceled. Canceling a canceled order returns 200 and changes nothing, and a paid order
-  returns 409. Canceling also expires the order's payment link.
+  returns 409. Canceling also expires the order's payment link. A paid order is canceled only by a
+  [refund](#refunds).
 - Another user's order returns 404, as if it did not exist.
 
 Both lists take these optional query parameters, and `GET /api/v1/orders/all` also takes `user_id`:
@@ -296,8 +301,8 @@ Payments use [Stripe Checkout](https://docs.stripe.com/payments/checkout), Strip
 
 ### Payment confirmation
 
-Stripe confirms a payment by calling `POST /api/v1/payments/webhook` with a `checkout.session.completed` event. Only
-that event confirms a payment.
+Stripe reports payments and refunds by calling `POST /api/v1/payments/webhook`. Two event types are used:
+`checkout.session.completed` confirms a payment, and `charge.refunded` confirms a refund (see [Refunds](#refunds)).
 
 - **Every request must carry a valid `Stripe-Signature` header**, computed by Stripe with the webhook secret
   (`STRIPE_WEBHOOK_SECRET`). The URL is public, so the signature is the only proof that a request comes from Stripe.
@@ -316,15 +321,55 @@ To receive events locally, run the [Stripe CLI](https://docs.stripe.com/stripe-c
 `whsec_...` secret it prints into `STRIPE_WEBHOOK_SECRET`:
 
 ```bash
-stripe listen --events checkout.session.completed --forward-to localhost:8000/api/v1/payments/webhook
+stripe listen --events checkout.session.completed,charge.refunded --forward-to localhost:8000/api/v1/payments/webhook
 stripe events resend <event_id>   # in another terminal: deliver an event again, e.g. to test repeated delivery
 ```
 
 Tests send events signed in the test itself, with the same check as in production.
 
+### Payment history
+
+| Endpoint                                    | Effect                                                       |
+|---------------------------------------------|--------------------------------------------------------------|
+| `GET /api/v1/payments`                      | Lists your payments ([paginated](#pagination)), newest first |
+| `GET /api/v1/payments/all`                  | Moderator or admin: lists every user's payments              |
+| `POST /api/v1/payments/{payment_id}/refund` | Admin: refunds a payment ([Refunds](#refunds))               |
+
+- Each payment shows its date, status, amount and order id, and its movies with the price paid. The moderator list
+  also shows the user id.
+- A payment is recorded only once Stripe confirms it, so its status is `successful` or, after a refund, `refunded`.
+  `canceled` is accepted as a filter, because the project specification lists it, but no payment gets it: a checkout
+  that is never paid cancels the order, and no payment is recorded.
+
+Both lists take these optional query parameters, and `GET /api/v1/payments/all` also takes `user_id`:
+
+| Parameter              | Effect                                             |
+|------------------------|----------------------------------------------------|
+| `date_from`, `date_to` | Date range (`YYYY-MM-DD`, UTC), both days included |
+| `status`               | `successful`, `refunded` or `canceled`             |
+| `sort_order`           | `desc` (default, newest first) or `asc`            |
+
+### Refunds
+
+1. An admin calls `POST /api/v1/payments/{payment_id}/refund`. The API asks Stripe to refund the full amount and
+   returns 202. Nothing changes yet.
+2. When Stripe has refunded the payment, it sends a `charge.refunded` event. The payment becomes `refunded`, the order
+   becomes `canceled`, and the user gets a confirmation email. The movies leave the user's purchased list and can be
+   bought again.
+
+- **Only Stripe's confirmation changes the data**, as with payments. A refund made in the Stripe dashboard is recorded
+  the same way.
+- Only `successful` payments can be refunded; others return 409. If Stripe reports that the payment is already
+  refunded, for example from the dashboard, the API also returns 409, and the webhook records the refund.
+- The payment row is locked while a refund is recorded, and a payment that is already refunded is left alone, so a
+  repeated event sends no second email.
+- A partial refund, which can only be made in the dashboard, is logged as a warning and not recorded. An event for an
+  unknown payment intent is logged as an error.
+- If Stripe cannot be reached or rejects the request, the API returns 502.
+
 ## Pagination
 
-Movie, user and order lists take `page` (default 1) and `page_size` (default 20, at most 100), and return:
+Movie, user, order and payment lists take `page` (default 1) and `page_size` (default 20, at most 100), and return:
 
 ```json
 {
@@ -381,7 +426,7 @@ sets it to `False`, so the docs are open in local development.
 - **Activation tokens appear in the server's access logs**, because the activation link is a `GET` opened from an
   email. They work once and expire after 24 hours.
 
-**Movies, cart and orders**
+**Movies, cart, orders and payments**
 
 - **Duplicate names are caught only by letter case.** "Sci-Fi" and "Science Fiction" are not detected.
 - **In `PATCH`, `null` means "no change"**, so `meta_score` and `gross` cannot be cleared once set.
@@ -390,8 +435,10 @@ sets it to `False`, so the docs are open in local development.
   larger one.
 - **Users are not notified** when a moderator force-deletes a movie that is in their cart.
 - **Payments run in Stripe's test mode**, and the return pages answer with JSON, since there is no frontend.
-- **Only instant payment methods such as cards are confirmed.** Bank debits that settle days later are not handled,
-  and neither are refunds.
+- **Only instant payment methods such as cards are confirmed.** Bank debits that settle days later are not handled.
+- **Users cannot request a refund themselves.** Only an admin can refund a payment, for example after a support
+  request.
+- **Refunds are always for the whole payment.** A single movie from an order cannot be refunded.
 - **Pending orders never expire.** A movie in a pending order cannot be ordered again until that order is canceled.
 - **An ordered movie can never be deleted**, even when every order containing it was canceled, and there is no way to
   hide a movie from the catalog instead.
@@ -491,8 +538,9 @@ Each stage runs only if the previous one passed. Pull requests run the first two
   IP address.
 - PostgreSQL and Redis have no published ports, and Mailpit's web UI listens only on `127.0.0.1`, because it shows
   every activation and password reset email.
-- Stripe sends payment confirmations to `https://cinema.omerlenko.dev/api/v1/payments/webhook`, registered in the
-  Stripe dashboard, whose signing secret is the server's `STRIPE_WEBHOOK_SECRET`.
+- Stripe sends payment and refund confirmations to `https://cinema.omerlenko.dev/api/v1/payments/webhook`,
+  registered in the Stripe dashboard for `checkout.session.completed` and `charge.refunded`. Its signing secret is the
+  server's `STRIPE_WEBHOOK_SECRET`.
 - All services restart automatically after a crash or a reboot.
 - Production settings live in a `.env` file on the server, readable only by its owner, never in the image or the
   repository. GitHub Secrets hold only what the pipeline needs to reach the server. A new required setting must be
@@ -522,7 +570,7 @@ src/
 ├── database/       # engine, sessions, declarative base
 ├── movies/         # movie catalog and sample data command
 ├── orders/         # orders and order history
-├── payments/       # Stripe gateway, checkout and cancel steps, payment webhook and records, return pages
+├── payments/       # Stripe gateway, checkout and cancel steps, webhook, payment history, refunds, return pages
 ├── celery_app.py   # Celery app and beat schedule
 └── main.py         # FastAPI app, health check, protected docs
 migrations/         # Alembic database migrations

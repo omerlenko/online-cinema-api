@@ -1,4 +1,5 @@
 from collections.abc import Callable, Awaitable
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -11,6 +12,7 @@ from src.accounts.models import User, UserGroupEnum
 from src.core.config import get_settings
 from src.movies.models import Movie
 from src.orders.models import Order, OrderStatusEnum, OrderItem
+from src.payments.models import Payment, PaymentStatusEnum
 
 from tests.helpers import auth_headers, FakeStripeGateway
 
@@ -358,3 +360,430 @@ async def test_payment_cancel_page(
         response.json()["message"] == "Payment was not completed. "
         "You can try again, or use a different payment method."
     )
+
+
+async def test_list_payments(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+):
+    user_a = await create_user(
+        email="user1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_b = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie_1 = await create_movie(name="Movie 1")
+    order_1 = await create_order(
+        user_id=user_a.id, movies=[movie_1], status=OrderStatusEnum.PAID
+    )
+    payment_1 = await create_payment(
+        order=order_1, created_at=datetime(2026, 11, 1, tzinfo=timezone.utc)
+    )
+
+    movie_2 = await create_movie(name="Movie 2", price=Decimal("9.99"))
+    order_2 = await create_order(
+        user_id=user_a.id, movies=[movie_2], status=OrderStatusEnum.PAID
+    )
+    payment_2 = await create_payment(
+        order=order_2, created_at=datetime(2026, 11, 2, tzinfo=timezone.utc)
+    )
+
+    movie_3 = await create_movie(name="Movie 3")
+    order_3 = await create_order(
+        user_id=user_b.id, movies=[movie_3], status=OrderStatusEnum.PAID
+    )
+    await create_payment(
+        order=order_3, created_at=datetime(2026, 11, 3, tzinfo=timezone.utc)
+    )
+
+    response = await client.get(f"{PAYMENTS_URL}", headers=auth_headers(user_a))
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    assert [payment["id"] for payment in response.json()["items"]] == [
+        payment_2.id,
+        payment_1.id,
+    ]
+    assert response.json()["total"] == 2
+    assert response.json()["items"][0] == {
+        "id": payment_2.id,
+        "created_at": payment_2.created_at.isoformat().replace("+00:00", "Z"),
+        "status": "successful",
+        "amount": "9.99",
+        "order_id": order_2.id,
+        "items": [
+            {"movie": {"id": movie_2.id, "name": "Movie 2"}, "price_at_payment": "9.99"}
+        ],
+    }
+
+
+async def test_list_payments_filter_by_status(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie_1 = await create_movie(name="Movie 1")
+    order_1 = await create_order(
+        user_id=user.id, movies=[movie_1], status=OrderStatusEnum.CANCELED
+    )
+    payment_1 = await create_payment(order=order_1, status=PaymentStatusEnum.REFUNDED)
+
+    movie_2 = await create_movie(name="Movie 2")
+    order_2 = await create_order(
+        user_id=user.id, movies=[movie_2], status=OrderStatusEnum.PAID
+    )
+    await create_payment(order=order_2, status=PaymentStatusEnum.SUCCESSFUL)
+
+    params = {"status": "refunded"}
+    response = await client.get(
+        f"{PAYMENTS_URL}", headers=auth_headers(user), params=params
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    assert [payment["id"] for payment in response.json()["items"]] == [
+        payment_1.id,
+    ]
+    assert response.json()["total"] == 1
+
+
+async def test_list_payments_filter_by_date(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    order_1 = await create_order(
+        user_id=user.id, movies=[], status=OrderStatusEnum.PAID
+    )
+    await create_payment(
+        order=order_1, created_at=datetime(2026, 11, 1, tzinfo=timezone.utc)
+    )
+
+    order_2 = await create_order(
+        user_id=user.id, movies=[], status=OrderStatusEnum.PAID
+    )
+    payment_2 = await create_payment(
+        order=order_2, created_at=datetime(2026, 11, 2, tzinfo=timezone.utc)
+    )
+
+    order_3 = await create_order(
+        user_id=user.id, movies=[], status=OrderStatusEnum.PAID
+    )
+    payment_3 = await create_payment(
+        order=order_3, created_at=datetime(2026, 11, 3, tzinfo=timezone.utc)
+    )
+
+    order_4 = await create_order(
+        user_id=user.id, movies=[], status=OrderStatusEnum.PAID
+    )
+    await create_payment(
+        order=order_4, created_at=datetime(2026, 11, 4, tzinfo=timezone.utc)
+    )
+
+    params = {"date_from": "2026-11-02", "date_to": "2026-11-03"}
+    response = await client.get(
+        f"{PAYMENTS_URL}", headers=auth_headers(user), params=params
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    assert [payment["id"] for payment in response.json()["items"]] == [
+        payment_3.id,
+        payment_2.id,
+    ]
+
+
+async def test_list_payments_filter_invalid_date(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    params = {"date_from": "2026-11-04", "date_to": "2026-11-01"}
+    response = await client.get(
+        f"{PAYMENTS_URL}", headers=auth_headers(user), params=params
+    )
+    assert response.status_code == 422, "Expected status code 422 Unprocessable Content"
+
+
+async def test_list_all_payments_as_admin(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+):
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_a = await create_user(
+        email="user1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_b = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie_1 = await create_movie(name="Movie 1")
+    order_1 = await create_order(
+        user_id=user_a.id, movies=[movie_1], status=OrderStatusEnum.PAID
+    )
+    payment_1 = await create_payment(order=order_1, status=PaymentStatusEnum.SUCCESSFUL)
+
+    movie_2 = await create_movie(name="Movie 2", price=Decimal("9.99"))
+    order_2 = await create_order(
+        user_id=user_b.id, movies=[movie_2], status=OrderStatusEnum.CANCELED
+    )
+    payment_2 = await create_payment(order=order_2, status=PaymentStatusEnum.REFUNDED)
+
+    response = await client.get(f"{PAYMENTS_URL}/all", headers=auth_headers(admin))
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    assert [payment["id"] for payment in response.json()["items"]] == [
+        payment_2.id,
+        payment_1.id,
+    ]
+    assert response.json()["total"] == 2
+    assert response.json()["items"][0] == {
+        "id": payment_2.id,
+        "created_at": payment_2.created_at.isoformat().replace("+00:00", "Z"),
+        "status": "refunded",
+        "amount": "9.99",
+        "order_id": order_2.id,
+        "items": [
+            {"movie": {"id": movie_2.id, "name": "Movie 2"}, "price_at_payment": "9.99"}
+        ],
+        "user_id": user_b.id,
+    }
+
+
+async def test_list_all_payments_filter_by_user_id(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+):
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user_a = await create_user(
+        email="user1@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+    user_b = await create_user(
+        email="user2@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie_1 = await create_movie(name="Movie 1")
+    order_1 = await create_order(
+        user_id=user_a.id, movies=[movie_1], status=OrderStatusEnum.PAID
+    )
+    payment_1 = await create_payment(order=order_1, status=PaymentStatusEnum.SUCCESSFUL)
+
+    movie_2 = await create_movie(name="Movie 2")
+    order_2 = await create_order(
+        user_id=user_b.id, movies=[movie_2], status=OrderStatusEnum.CANCELED
+    )
+    await create_payment(order=order_2, status=PaymentStatusEnum.REFUNDED)
+
+    params = {"user_id": user_a.id}
+    response = await client.get(
+        f"{PAYMENTS_URL}/all", headers=auth_headers(admin), params=params
+    )
+    assert response.status_code == 200, "Expected status code 200 OK"
+
+    assert [payment["id"] for payment in response.json()["items"]] == [
+        payment_1.id,
+    ]
+    assert response.json()["total"] == 1
+
+
+async def test_list_all_payments_as_user(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    response = await client.get(f"{PAYMENTS_URL}/all", headers=auth_headers(user))
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+
+async def test_refund_payment_as_admin(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie = await create_movie(name="Movie 1")
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.PAID
+    )
+    payment = await create_payment(order=order, status=PaymentStatusEnum.SUCCESSFUL)
+
+    response = await client.post(
+        f"{PAYMENTS_URL}/{payment.id}/refund", headers=auth_headers(admin)
+    )
+    assert response.status_code == 202, "Expected status code 202 Accepted"
+
+    assert fake_stripe_gateway.refunded_payments == [payment.external_payment_id]
+    assert (
+        await db_session.scalar(select(Payment.status).where(Payment.id == payment.id))
+        == PaymentStatusEnum.SUCCESSFUL
+    )
+    assert (
+        await db_session.scalar(select(Order.status).where(Order.id == order.id))
+        == OrderStatusEnum.PAID
+    )
+
+
+async def test_refund_payment_as_moderator(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    moderator = await create_user(
+        email="mod@example.com", is_active=True, user_group=UserGroupEnum.MODERATOR
+    )
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    order = await create_order(user_id=user.id, movies=[], status=OrderStatusEnum.PAID)
+    payment = await create_payment(order=order, status=PaymentStatusEnum.SUCCESSFUL)
+
+    response = await client.post(
+        f"{PAYMENTS_URL}/{payment.id}/refund", headers=auth_headers(moderator)
+    )
+    assert response.status_code == 403, "Expected status code 403 Forbidden"
+
+    assert fake_stripe_gateway.refunded_payments == []
+
+
+async def test_refund_payment_with_unknown_payment(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+):
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+
+    response = await client.post(
+        f"{PAYMENTS_URL}/12345/refund", headers=auth_headers(admin)
+    )
+    assert response.status_code == 404, "Expected status code 404 Not Found"
+
+
+async def test_refund_already_refunded_payment(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie = await create_movie(name="Movie 1")
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.CANCELED
+    )
+    payment = await create_payment(order=order, status=PaymentStatusEnum.REFUNDED)
+
+    response = await client.post(
+        f"{PAYMENTS_URL}/{payment.id}/refund", headers=auth_headers(admin)
+    )
+    assert response.status_code == 409, "Expected status code 409 Conflict"
+
+    assert fake_stripe_gateway.refunded_payments == []
+
+
+async def test_refund_already_refunded_payment_in_stripe(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    fake_stripe_gateway.already_refunded = True
+
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie = await create_movie(name="Movie 1")
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.PAID
+    )
+    payment = await create_payment(order=order, status=PaymentStatusEnum.SUCCESSFUL)
+
+    response = await client.post(
+        f"{PAYMENTS_URL}/{payment.id}/refund", headers=auth_headers(admin)
+    )
+    assert response.status_code == 409, "Expected status code 409 Conflict"
+
+    assert fake_stripe_gateway.refunded_payments == [payment.external_payment_id]
+
+
+async def test_refund_payment_stripe_not_available(
+    client: AsyncClient,
+    create_user: Callable[..., Awaitable[User]],
+    create_movie: Callable[..., Awaitable[Movie]],
+    create_order: Callable[..., Awaitable[Order]],
+    create_payment: Callable[..., Awaitable[Payment]],
+    fake_stripe_gateway: FakeStripeGateway,
+):
+    fake_stripe_gateway.provider_down = True
+
+    admin = await create_user(
+        email="admin@example.com", is_active=True, user_group=UserGroupEnum.ADMIN
+    )
+    user = await create_user(
+        email="user@example.com", is_active=True, user_group=UserGroupEnum.USER
+    )
+
+    movie = await create_movie(name="Movie 1")
+    order = await create_order(
+        user_id=user.id, movies=[movie], status=OrderStatusEnum.PAID
+    )
+    payment = await create_payment(order=order, status=PaymentStatusEnum.SUCCESSFUL)
+
+    response = await client.post(
+        f"{PAYMENTS_URL}/{payment.id}/refund", headers=auth_headers(admin)
+    )
+    assert response.status_code == 502, "Expected status code 502 Bad Gateway"

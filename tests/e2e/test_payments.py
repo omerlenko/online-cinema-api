@@ -15,7 +15,7 @@ from tests.helpers import (
     FakeEmailSender,
     FakeStripeGateway,
     post_signed_webhook,
-    build_stripe_event,
+    build_checkout_completed_event,
 )
 
 settings = get_settings()
@@ -105,7 +105,9 @@ async def test_place_order_and_purchase(
     assert session_id is not None
 
     # send signed completed.checkout event to webhook
-    event = build_stripe_event(session_id=session_id, order_id=order_id, amount=1498)
+    event = build_checkout_completed_event(
+        session_id=session_id, order_id=order_id, amount=1498
+    )
     response_webhook = await post_signed_webhook(
         client=client, webhook_url=f"{PAYMENTS_URL}/webhook", event=event
     )

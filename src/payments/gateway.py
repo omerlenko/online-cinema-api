@@ -43,6 +43,12 @@ class InvalidWebhookError(Exception):
     """
 
 
+class PaymentAlreadyRefundedError(Exception):
+    """
+    Raised when trying to refund an already refunded Stripe payment.
+    """
+
+
 @dataclass
 class CheckoutItem:
     name: str
@@ -63,6 +69,15 @@ class CheckoutCompletedEvent:
     amount: int | None
     payment_intent_id: str | None
     payment_status: str
+
+
+@dataclass
+class ChargeRefundedEvent:
+    event_id: str
+    payment_intent_id: str
+    refunded: bool
+    amount: int
+    amount_refunded: int
 
 
 class StripeGateway:
@@ -138,6 +153,29 @@ class StripeGateway:
             logger.exception("Failed to expire Stripe checkout session %s", session_id)
             raise PaymentProviderError() from exc
 
+    async def refund_payment(self, payment_intent_id: str) -> None:
+        try:
+            await self.client.v1.refunds.create_async(
+                params={"payment_intent": payment_intent_id}
+            )
+
+        except InvalidRequestError as exc:
+            if exc.code == "charge_already_refunded":
+                raise PaymentAlreadyRefundedError() from exc
+
+            logger.exception(
+                "Failed to refund Stripe payment intent %s",
+                payment_intent_id,
+            )
+            raise PaymentProviderError() from exc
+
+        except StripeError as exc:
+            logger.exception(
+                "Failed to refund Stripe payment intent %s",
+                payment_intent_id,
+            )
+            raise PaymentProviderError() from exc
+
 
 @lru_cache
 def _create_stripe_gateway() -> StripeGateway:
@@ -153,7 +191,7 @@ StripeGatewayDep = Annotated[StripeGateway, Depends(get_stripe_gateway)]
 
 def parse_webhook_event(
     payload: bytes, signature: str | None, secret: str
-) -> CheckoutCompletedEvent | None:
+) -> CheckoutCompletedEvent | ChargeRefundedEvent | None:
     try:
         event = Webhook.construct_event(payload, signature, secret)
     except SignatureVerificationError as exc:
@@ -188,5 +226,23 @@ def parse_webhook_event(
             amount=session.amount_total,
             payment_intent_id=session.payment_intent,
             payment_status=session.payment_status,
+        )
+
+    if event.type == "charge.refunded":
+        charge = event.data.object
+        if charge.payment_intent is None:
+            logger.warning(
+                "Ignored Stripe event %s: charge %s has no payment intent",
+                event.id,
+                charge.id,
+            )
+            return None
+
+        return ChargeRefundedEvent(
+            event_id=event.id,
+            payment_intent_id=charge.payment_intent,
+            refunded=charge.refunded,
+            amount=charge.amount,
+            amount_refunded=charge.amount_refunded,
         )
     return None

@@ -40,6 +40,7 @@ from src.movies.models import (
 )
 from src.orders.models import Order, OrderStatusEnum, OrderItem
 from src.payments.gateway import get_stripe_gateway
+from src.payments.models import Payment, PaymentStatusEnum, PaymentItem
 from tests.helpers import FakeEmailSender, FakeStripeGateway
 
 settings = get_settings()
@@ -248,7 +249,7 @@ def create_movie(db_session: AsyncSession) -> Callable[..., Awaitable[Movie]]:
         meta_score: float | None = None,
         gross: float | None = None,
         description: str = "A Test Movie description.",
-        price: Decimal = Decimal("99.99"),
+        price: Decimal = Decimal("9.99"),
         certification_id: int | None = None,
         genres: list[Genre] | None = None,
         stars: list[Star] | None = None,
@@ -369,3 +370,45 @@ def fake_stripe_gateway(monkeypatch: MonkeyPatch) -> FakeStripeGateway:
 @pytest.fixture(autouse=True)
 def reset_limiter() -> None:
     limiter.reset()
+
+
+@pytest.fixture
+def create_payment(db_session: AsyncSession) -> Callable[..., Awaitable[Payment]]:
+    count = 0
+
+    async def _create_payment(
+        order: Order,
+        status: PaymentStatusEnum = PaymentStatusEnum.SUCCESSFUL,
+        created_at: datetime | None = None,
+        external_payment_id: str | None = None,
+    ) -> Payment:
+        if external_payment_id is None:
+            nonlocal count
+            count += 1
+            external_payment_id = f"pi_test_{count}"
+
+        if created_at is None:
+            created_at = datetime.now(timezone.utc)
+
+        payment_items = []
+        for order_item in order.items:
+            payment_item = PaymentItem(
+                order_item=order_item, price_at_payment=order_item.price_at_order
+            )
+            payment_items.append(payment_item)
+
+        payment = Payment(
+            user_id=order.user.id,
+            status=status,
+            created_at=created_at,
+            amount=order.total_amount,
+            external_payment_id=external_payment_id,
+        )
+        payment.order = order
+        payment.items = payment_items
+
+        db_session.add(payment)
+        await db_session.flush()
+        return payment
+
+    return _create_payment
