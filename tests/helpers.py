@@ -14,6 +14,7 @@ from src.payments.gateway import (
     CheckoutSessionAlreadyPaidError,
     CheckoutItem,
     PaymentProviderError,
+    PaymentAlreadyRefundedError,
 )
 
 settings = get_settings()
@@ -42,13 +43,21 @@ class FakeEmailSender:
 
 class FakeStripeGateway:
 
-    def __init__(self, session_paid: bool = False, provider_down: bool = False) -> None:
+    def __init__(
+        self,
+        session_paid: bool = False,
+        provider_down: bool = False,
+        already_refunded: bool = False,
+    ) -> None:
         self.id_counter = 0
-        self.created_sessions: list[tuple[int, list[CheckoutItem]]] = []
 
         self.session_paid = session_paid
         self.provider_down = provider_down
+        self.already_refunded = already_refunded
+
+        self.created_sessions: list[tuple[int, list[CheckoutItem]]] = []
         self.expired_session_ids: list[str] = []
+        self.refunded_payments: list[str] = []
 
     async def create_session(
         self, order_id: int, checkout_items: list[CheckoutItem]
@@ -72,6 +81,14 @@ class FakeStripeGateway:
         self.expired_session_ids.append(session_id)
         if self.session_paid:
             raise CheckoutSessionAlreadyPaidError()
+
+    async def refund_payment(self, payment_intent_id: str) -> None:
+        if self.provider_down:
+            raise PaymentProviderError()
+
+        self.refunded_payments.append(payment_intent_id)
+        if self.already_refunded:
+            raise PaymentAlreadyRefundedError()
 
 
 def extract_reset_token_from_email(email_body: str) -> str:
@@ -144,7 +161,7 @@ def seed_movie_payload(
     return movie_seed_data
 
 
-def build_stripe_event(
+def build_checkout_completed_event(
     event_type: str = "checkout.session.completed",
     session_id: str = "cs_test_1",
     order_id: int | None = None,
@@ -168,6 +185,31 @@ def build_stripe_event(
                 "amount_total": amount,
                 "payment_intent": payment_intent,
                 "payment_status": payment_status,
+            }
+        },
+    }
+    return event_payload
+
+
+def build_charge_refunded_event(
+    charge_id: str = "ch_test_1",
+    amount: int = 999,
+    amount_refunded: int = 999,
+    payment_intent: str | None = "pi_test_1",
+    refunded: bool = True,
+) -> dict[str, Any]:
+    event_payload = {
+        "id": "evt_test_1",
+        "object": "event",
+        "type": "charge.refunded",
+        "data": {
+            "object": {
+                "id": charge_id,
+                "object": "charge",
+                "amount": amount,
+                "amount_refunded": amount_refunded,
+                "payment_intent": payment_intent,
+                "refunded": refunded,
             }
         },
     }
